@@ -28,6 +28,27 @@ var Engine = (function(global) {
     canvas.width = 505;
     canvas.height = 606;
     doc.body.appendChild(canvas);
+    var map;
+    var map_tiles;
+    var item_tiles;
+    var numCols;
+    var numRows;
+    var mapTileWidth = 101;
+    var mapTileHeight = 83;
+    var mapTileTopGap = 50;
+    var levelOffset = 41;
+    //absolute location where the player sprite will appear on the screen
+    var playerAbsolutePosX;
+    var playerAbsolutePosY;
+
+    //range of visible tiles
+    var colStart,
+        colEnd,
+        rowStart,
+        rowEnd;
+
+    global.mapTileWidth = mapTileWidth;
+    global.mapTileHeight = mapTileHeight;
 
     /* This function serves as the kickoff point for the game loop itself
      * and handles properly calling the update and render methods.
@@ -66,6 +87,7 @@ var Engine = (function(global) {
     function init() {
         reset();
         lastTime = Date.now();
+        updatePOV();
         main();
     }
 
@@ -94,7 +116,46 @@ var Engine = (function(global) {
         allEnemies.forEach(function(enemy) {
             enemy.update(dt);
         });
-        player.update();
+        if(player.update(dt))
+        {
+
+            updatePOV();
+        }
+    }
+
+    /*
+     * Calculate:
+     *  (1) where in the screen the player will be located and,
+     *  (2) which tiles from the entire map are visible based on player location
+     */
+    function updatePOV() {
+
+        if ( player.x + player.sw/2 < canvas.width/2) {
+            playerAbsolutePosX = player.x;
+        }
+        else if( player.x + player.sw/2 > numCols*mapTileWidth - canvas.width/2) {
+            playerAbsolutePosX =  canvas.width + player.x - numCols*mapTileWidth;
+        }
+        else {
+            playerAbsolutePosX = (canvas.width - player.sw)/2;
+        }
+
+        if ( player.y + player.sh*2/3 < canvas.height/2) {
+            playerAbsolutePosY = player.y;
+        }
+        else if( player.y + player.sh*2/3 > numRows*mapTileHeight - canvas.height/2) {
+            playerAbsolutePosY =  canvas.height + player.y - numRows*mapTileHeight;
+        }
+        else {
+            playerAbsolutePosY = canvas.height/2 - player.sh*2/3;
+        }
+
+        //don't render all tiles but just those that are visible
+        colStart = Math.floor(Math.max(0, player.x - playerAbsolutePosX)/mapTileWidth),
+        colEnd = Math.floor(Math.min((numCols -1)*mapTileWidth, player.x + canvas.width - playerAbsolutePosX)/mapTileWidth) + 1,
+        rowStart = Math.floor(Math.max(0, player.y - playerAbsolutePosY)/mapTileHeight),
+        //one extra tile to take into account stacked tiles
+        rowEnd = Math.floor(Math.min((numRows-1)*mapTileHeight, player.y + canvas.height - playerAbsolutePosY)/mapTileHeight) + 2;
     }
 
     /* This function initially draws the "game level", it will then call
@@ -104,27 +165,17 @@ var Engine = (function(global) {
      * they are just drawing the entire screen over and over.
      */
     function render() {
-        /* This array holds the relative URL to the image used
-         * for that particular row of the game level.
-         */
-        var rowImages = [
-                'images/water-block.png',   // Top row is water
-                'images/stone-block.png',   // Row 1 of 3 of stone
-                'images/stone-block.png',   // Row 2 of 3 of stone
-                'images/stone-block.png',   // Row 3 of 3 of stone
-                'images/grass-block.png',   // Row 1 of 2 of grass
-                'images/grass-block.png'    // Row 2 of 2 of grass
-            ],
-            numRows = 6,
-            numCols = 5,
-            row, col;
-
+        var row,col, level;
         /* Loop through the number of rows and columns we've defined above
-         * and, using the rowImages array, draw the correct image for that
+         * and, using the tiles and map arrays, draw the correct image for that
          * portion of the "grid"
          */
-        for (row = 0; row < numRows; row++) {
-            for (col = 0; col < numCols; col++) {
+        ctx.save();
+        ctx.translate(playerAbsolutePosX - player.x, playerAbsolutePosY - player.y);
+        ctx.save();
+        ctx.translate(0, -mapTileTopGap);
+        for (row = rowStart; row < rowEnd; row++) {
+            for (col = colStart; col < colEnd; col++) {
                 /* The drawImage function of the canvas' context element
                  * requires 3 parameters: the image to draw, the x coordinate
                  * to start drawing and the y coordinate to start drawing.
@@ -132,12 +183,32 @@ var Engine = (function(global) {
                  * so that we get the benefits of caching these images, since
                  * we're using them over and over.
                  */
-                ctx.drawImage(Resources.get(rowImages[row]), col * 101, row * 83);
+                for (level = 0; level < map.length ; level++)
+                {
+                    var tile = map[level][row*numCols + col];
+                    if(tile != "." && (tile in map_tiles))  {
+                        ctx.save();
+                        ctx.translate(0, -levelOffset*level);
+                        ctx.drawImage(Resources.get(map_tiles[tile]), col * mapTileWidth, row * mapTileHeight);
+                        ctx.restore();
+                    }
+                }
             }
         }
+        ctx.restore();
 
+        if(debug) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.lineWidth = 10;
+            ctx.rect(0, 0, numCols*mapTileWidth, numRows*mapTileHeight);
+            ctx.strokeStyle = 'magenta';
+            ctx.stroke();
+            ctx.restore();
+        }
 
         renderEntities();
+        ctx.restore();
     }
 
     /* This function is called by the render function and is called on each game
@@ -148,19 +219,124 @@ var Engine = (function(global) {
         /* Loop through all of the objects within the allEnemies array and call
          * the render function you have defined.
          */
+        player.render();
         allEnemies.forEach(function(enemy) {
             enemy.render();
         });
-
-        player.render();
     }
 
-    /* This function does nothing but it could have been a good place to
+    /* This function d a good place to
      * handle game reset states - maybe a new game menu or a game over screen
      * those sorts of things. It's only called once by the init() method.
      */
     function reset() {
-        // noop
+        var level1 =
+               "DDDDDDDDDDDDDDDDDDDD\
+                DCCCCCCCCCCCCCCCCCCD\
+                DCCCCCCCCCCCCCCCCCCD\
+                DCCCCCCCCCCCCCCCCCCD\
+                DCCCGGGGGGGGGGGGCCCD\
+                DCCCGGGGGGGGGGGGCCCD\
+                DCCCGGGGGGGGGGGGCCCD\
+                DCCCGGGGGGGGGGGGCCCD\
+                DCCCGGG..GG..GGGCCCD\
+                DCCCGGGCCGGCCGGGCCCD\
+                DCCCGCCGG..GGCCGCCCD\
+                DCCCGCCGGCCGGCCGCCCD\
+                DCCCGGGCCGGCCGGGCCCD\
+                DCCCGGGCCGGCCGGGCCCD\
+                DCCCGGGGGCCGGGGGCCCD\
+                DCCCGGGGGCCGGGGGCCCD\
+                DCCCGGGGGGGGGGGGCCCD\
+                DCCCGGGGGGGGGGGGCCCD\
+                DCCCGGGGGGCGGGGGCCCD\
+                DCCCGGGGGCCCGGGGCCCD\
+                DCCCGGGGGGCGGGGGCCCD\
+                DCCCGGCCCCCCCCCGCCCD\
+                DCCCGGGGCCCCCGGGCCCD\
+                DCCCGGGGGCCCGGGGCCCD\
+                DCCCGGGGGCCCGGGGCCCD\
+                DCCCGGGGGCGCGGGGCCCD\
+                DCCCGGGGGCGCGGGGCCCD\
+                DCCCGGGGGCGCGGGGCCCD\
+                DCCCGGGGGGGGGGGGCCCD\
+                DCCCCCCCCCCCCCCCCCCD\
+                DCCCCCCCCCCCCCCCCCCD\
+                DCCCCCCCCCCCCCCCCCCD\
+                DDDDDDDDDDDDDDDDDDDD";
+
+        var level2 =
+               "....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                .........KK.........\
+                .........CC.........\
+                .........CC.........\
+                ......ACCCCCCJ......\
+                ......ACCCCCCJ......\
+                .........CC.........\
+                .........CC.........\
+                .........LL.........\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................";
+//remove empty spaces from string.
+        level1 = level1.replace(/\s+/g,"");
+        level2 = level2.replace(/\s+/g,"");
+
+        map =
+            [
+                level1,
+                level2
+            ]
+
+        map_tiles = {
+                      'A': 'images/ramp-west.png',
+                      'B': 'images/water-block.png',
+                      'C': 'images/stone-block.png',
+                      'D': 'images/dirt-block.png',
+                      'E': 'images/brown-block.png',
+                      'F': 'images/plain-block.png',
+                      'G': 'images/grass-block.png',
+                      'H': 'images/stone-tall-block.png',
+                      'I': 'images/wood-block.png',
+                      'J': 'images/ramp-east.png',
+                      'K': 'images/ramp-north.png',
+                      'L': 'images/ramp-south.png',
+                      'M': 'images/wall-block.png',
+                      'O': 'images/wall-block-tall.png'
+                    };
+
+        item_tiles = {
+                        '1': 'images/tree-short.png',
+                        '2': 'images/tree-tall.png',
+                        '3': 'images/tree-ugly.png'
+                     }
+
+        numCols = 20;
+        numRows = map[0].length/numCols;
+
+        global.numCols = numCols;
+        global.numRows = numRows;
     }
 
     /* Go ahead and load all of the images we know we're going to need to
@@ -172,7 +348,30 @@ var Engine = (function(global) {
         'images/water-block.png',
         'images/grass-block.png',
         'images/enemy-bug.png',
-        'images/char-boy.png'
+        'images/char-boy.png',
+        'images/brown-block.png',
+        'images/dirt-block.png',
+        'images/plain-block.png',
+        'images/stone-tall-block.png',
+        'images/tree-short.png',
+        'images/tree-tall.png',
+        'images/tree-ugly.png',
+        'images/wood-block.png',
+        'images/ramp-east.png',
+        'images/ramp-north.png',
+        'images/ramp-south.png',
+        'images/ramp-west.png',
+        'images/shadow-east.png',
+        'images/shadow-north.png',
+        'images/shadow-north-east.png',
+        'images/shadow-north-west.png',
+        'images/shadow-side-west.png',
+        'images/shadow-south.png',
+        'images/shadow-south-east.png',
+        'images/shadow-south-west.png',
+        'images/shadow-west.png',
+        'images/wall-block.png',
+        'images/wall-block-tall.png'
     ]);
     Resources.onReady(init);
 
