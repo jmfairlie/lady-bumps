@@ -36,7 +36,7 @@ var Engine = (function(global) {
     var mapTileWidth = 101;
     var mapTileHeight = 83;
     var mapTileTopGap = 50;
-    var levelOffset = 41;
+    var levelOffset = 37;
     //absolute location where the player sprite will appear on the screen
     var playerAbsolutePosX;
     var playerAbsolutePosY;
@@ -155,7 +155,23 @@ var Engine = (function(global) {
         colEnd = Math.floor(Math.min((numCols -1)*mapTileWidth, player.x + canvas.width - playerAbsolutePosX)/mapTileWidth) + 1,
         rowStart = Math.floor(Math.max(0, player.y - playerAbsolutePosY)/mapTileHeight),
         //one extra tile to take into account stacked tiles
-        rowEnd = Math.floor(Math.min((numRows-1)*mapTileHeight, player.y + canvas.height - playerAbsolutePosY)/mapTileHeight) + 2;
+        rowEnd = Math.min(numRows, Math.floor(Math.min((numRows-1)*mapTileHeight, player.y + canvas.height - playerAbsolutePosY)/mapTileHeight) + 2);
+    }
+
+    function hilightTiles(entity, level, row, col, ctx, color) {
+        if(entity.level == level) {
+            if((entity.tileTop  == row || entity.tileBottom == row) &&
+              (entity.tileLeft == col || entity.tileRight  == col))
+            {
+                ctx.beginPath();
+                ctx.globalAlpha=0.4;
+                ctx.rect(col * mapTileWidth, row * mapTileHeight + mapTileTopGap, mapTileWidth, mapTileHeight);
+                ctx.fillStyle = color;
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha=1;
+            }
+        }
     }
 
     /* This function initially draws the "game level", it will then call
@@ -170,26 +186,35 @@ var Engine = (function(global) {
          * and, using the tiles and map arrays, draw the correct image for that
          * portion of the "grid"
          */
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
         ctx.translate(playerAbsolutePosX - player.x, playerAbsolutePosY - player.y);
         ctx.save();
         ctx.translate(0, -mapTileTopGap);
         for (row = rowStart; row < rowEnd; row++) {
             for (col = colStart; col < colEnd; col++) {
-                /* The drawImage function of the canvas' context element
-                 * requires 3 parameters: the image to draw, the x coordinate
-                 * to start drawing and the y coordinate to start drawing.
-                 * We're using our Resources helpers to refer to our images
-                 * so that we get the benefits of caching these images, since
-                 * we're using them over and over.
-                 */
                 for (level = 0; level < map.length ; level++)
                 {
                     var tile = map[level][row*numCols + col];
-                    if(tile != "." && (tile in map_tiles))  {
+                    if(tile != ".")  {
                         ctx.save();
                         ctx.translate(0, -levelOffset*level);
+                        /* The drawImage function of the canvas' context element
+                         * requires 3 parameters: the image to draw, the x coordinate
+                         * to start drawing and the y coordinate to start drawing.
+                         * We're using our Resources helpers to refer to our images
+                         * so that we get the benefits of caching these images, since
+                         * we're using them over and over.
+                         */
                         ctx.drawImage(Resources.get(map_tiles[tile]), col * mapTileWidth, row * mapTileHeight);
+                        if(debug) {
+                            //highlight the tiles the player is stepping on
+                            hilightTiles(player, level, row, col, ctx, 'yellow');
+                            //draw tile coords
+                            ctx.fillStyle = 'magenta';
+                            ctx.font = "15px serif";
+                            ctx.fillText("("+Math.floor(col)+", "+Math.floor(row)+", "+level+")", col * mapTileWidth + 20, row * mapTileHeight+100);
+                        }
                         ctx.restore();
                     }
                 }
@@ -231,74 +256,76 @@ var Engine = (function(global) {
      */
     function reset() {
         var level1 =
-               "DDDDDDDDDDDDDDDDDDDD\
-                DCCCCCCCCCCCCCCCCCCD\
-                DCCCCCCCCCCCCCCCCCCD\
-                DCCCCCCCCCCCCCCCCCCD\
-                DCCCGGGGGGGGGGGGCCCD\
-                DCCCGGGGGGGGGGGGCCCD\
-                DCCCGGGGGGGGGGGGCCCD\
-                DCCCGGGGGGGGGGGGCCCD\
-                DCCCGGG..GG..GGGCCCD\
-                DCCCGGGCCGGCCGGGCCCD\
-                DCCCGCCGG..GGCCGCCCD\
-                DCCCGCCGGCCGGCCGCCCD\
-                DCCCGGGCCGGCCGGGCCCD\
-                DCCCGGGCCGGCCGGGCCCD\
-                DCCCGGGGGCCGGGGGCCCD\
-                DCCCGGGGGCCGGGGGCCCD\
-                DCCCGGGGGGGGGGGGCCCD\
-                DCCCGGGGGGGGGGGGCCCD\
-                DCCCGGGGGGCGGGGGCCCD\
-                DCCCGGGGGCCCGGGGCCCD\
-                DCCCGGGGGGCGGGGGCCCD\
-                DCCCGGCCCCCCCCCGCCCD\
-                DCCCGGGGCCCCCGGGCCCD\
-                DCCCGGGGGCCCGGGGCCCD\
-                DCCCGGGGGCCCGGGGCCCD\
-                DCCCGGGGGCGCGGGGCCCD\
-                DCCCGGGGGCGCGGGGCCCD\
-                DCCCGGGGGCGCGGGGCCCD\
-                DCCCGGGGGGGGGGGGCCCD\
-                DCCCCCCCCCCCCCCCCCCD\
-                DCCCCCCCCCCCCCCCCCCD\
-                DCCCCCCCCCCCCCCCCCCD\
-                DDDDDDDDDDDDDDDDDDDD";
+               "BBBBBBBBBBBBBBBBBBBB\
+                .GGGGGGGGGGGGGGGGGGG\
+                .CCCCCCCCCCCCCCCCCC.\
+                .CCCCCCCCCCCCCCCCCC.\
+                .CCCCCCCCCCCCCCCCCC.\
+                .CCCGGGGGGGGGGGGCCC.\
+                .CCCGGGGGGGGGGGGCCC.\
+                .CCCGGGGGGGGGGGGCCC.\
+                .CCCGGGGGGGGGGGGCCC.\
+                .CCCGGG..GG..GGGCCC.\
+                .CCCGGGCCGGCCGGGCCC.\
+                .CCCGCCGG..GGCCGCCC.\
+                .CCCGCCGGCCGGCCGCCC.\
+                .CCCGGGCCGGCCGGGCCC.\
+                .CCCGGGCCGGCCGGGCCC.\
+                .CCCGGGGGCCGGGGGCCC.\
+                .CCCGGGGGCCGGGGGCCC.\
+                .CCCGGGGGGGGGGGGCCC.\
+                .CCCGGGGGGGGGGGGCCC.\
+                .CCCGGGGGGCGGGGGCCC.\
+                .CCCGGGGGCCCGGGGCCC.\
+                .CCCGGGGGGCGGGGGCCC.\
+                .CCCGGCCCCCCCCCGCCC.\
+                .CCCGGGGCCCCCGGGCCC.\
+                .CCCGGGGGCCCGGGGCCC.\
+                .CCCGGGGGCCCGGGGCCC.\
+                .CCCGGGGGCGCGGGGCCC.\
+                .CCCGGGGGCGCGGGGCCC.\
+                .CCCGGGGGCGCGGGGCCC.\
+                .CCCGGGGGGGGGGGGCCC.\
+                .CCCCCCCCCCCCCCCCCC.\
+                .CCCCCCCCCCCCCCCCCC.\
+                .CCCCCCCCCCCCCCCCCC.\
+                ....................";
 
         var level2 =
                "....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                .........KK.........\
-                .........CC.........\
-                .........CC.........\
-                ......ACCCCCCJ......\
-                ......ACCCCCCJ......\
-                .........CC.........\
-                .........CC.........\
-                .........LL.........\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................";
+                MMMMMMMMMMMMMMMMMMMM\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M........KK........M\
+                M........CC........M\
+                M........CC........M\
+                M.....ACCCCCCJ.....M\
+                M.....ACCCCCCJ.....M\
+                M........CC........M\
+                M........CC........M\
+                M........LL........M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                M..................M\
+                MMMMMMMMMMMMMMMMMMMM";
 //remove empty spaces from string.
         level1 = level1.replace(/\s+/g,"");
         level2 = level2.replace(/\s+/g,"");
@@ -337,6 +364,7 @@ var Engine = (function(global) {
 
         global.numCols = numCols;
         global.numRows = numRows;
+        global.map = map;
     }
 
     /* Go ahead and load all of the images we know we're going to need to
