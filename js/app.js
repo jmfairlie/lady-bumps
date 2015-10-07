@@ -4,12 +4,14 @@ var Entity = function(sprite, x, y, vx, vy) {
     this.y = y;
     this.vx = vx;
     this.vy = vy;
+    this.accumx = 0;
+    this.accumy = 0;
+
     var img = Resources.get(sprite);
     this.sw = img.width;
     this.sh = img.height;
     this.attenuation = 1;
     this.bounceFactor =1;
-    // x,y, w, h: in obj coords
     this.hitRect = { 'x':0, 'y':0, 'w':0, 'h':0, 'cx':0, 'cy':0 };
     this.level= 0;
     this.tileTop;
@@ -21,9 +23,9 @@ var Entity = function(sprite, x, y, vx, vy) {
 //calculate the angle that the sprite should be rotated in order to create
 //crawling/walking animation
 Entity.prototype.angle = function() {
-    var a = 20;
+    var a = 40;
     var f = 60;
-    var angle = (Math.abs(this.x) + Math.abs(this.y)) % a/a*Math.PI*2;
+    var angle = (Math.abs(this.accumx) + Math.abs(this.accumy)) % a/a*Math.PI*2;
     return Math.sin(angle)/f*Math.PI*2;
 }
 
@@ -99,6 +101,7 @@ Entity.prototype.customRenderOperation = function() {
 Entity.prototype.update = function(dt) {
     var epsilon = 5;
     var entityMoved = false;
+
     this.tileTop = Math.floor(this.hitTop()/mapTileHeight);
     this.tileBottom = Math.floor(this.hitBottom()/mapTileHeight);
     this.tileLeft = Math.floor(this.hitLeft()/mapTileWidth);
@@ -128,6 +131,7 @@ Entity.prototype.update = function(dt) {
         }
         else {
             this.x += this.vx*dt;
+            this.accumx += Math.abs(this.vx)*dt;
         }
 
         this.vx *= this.attenuation;
@@ -159,6 +163,7 @@ Entity.prototype.update = function(dt) {
         }
         else {
             this.y += this.vy*dt;
+            this.accumy += Math.abs(this.vy)*dt;
         }
         this.vy *= this.attenuation;
         entityMoved = true;
@@ -221,12 +226,14 @@ var Player = function(x, y) {
     this.attenuation = 0.98;
     //lose momentum after bounce
     this.bounceFactor = 0.25;
-    this.hitRect.x = 18;
-    this.hitRect.y = 98;
-    this.hitRect.w = 66;
-    this.hitRect.h = 41;
+    this.hitRect.x = 15;
+    this.hitRect.y = 70;
+    this.hitRect.w = 72;
+    this.hitRect.h = 70;
     this.hitRect.cx = 50;
     this.hitRect.cy = 120;
+    this.x-=this.hitRect.cx;
+    this.y-=this.hitRect.cy;
 };
 
 Player.prototype = Object.create(Entity.prototype);
@@ -259,19 +266,24 @@ Player.prototype.alignAngle = function() {
 // Place all enemy objects in an array called allEnemies
 // Place the player object in a variable called player
 var allEnemies = [];
-var numEnemies = 1;
+var numEnemies = 10;
 var player;
 var debug = true;
 
 var initAppStuff = function()
 {
-    var uglyOffsetx = (ctx.canvas.width - 101)/2;
-    var uglyOffsety = ctx.canvas.height/2 - 171*2/3;
-    player = new Player(uglyOffsetx, uglyOffsety);
+
+    var centerx = ctx.canvas.width/2;
+    var centery = ctx.canvas.height/2;
+    player = new Player(centerx, centery);
 
     for (i = 0; i < numEnemies; i++) {
-        //
-        allEnemies.push(new Enemy(300, 500 + i*80,((i%2)*2-1)*-100*(i+1), 50));
+        var basev = 100;
+        allEnemies.push(new Enemy(
+                                    150 + 30*i,
+                                    200 + i*120,
+                                    (i%2*-2+1)*(basev + 10*i),
+                                    (i%2*2-1)*(basev + 10*i)));
     }
 
     // This listens for key presses and sends the keys to your
