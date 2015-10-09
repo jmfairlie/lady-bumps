@@ -1,4 +1,4 @@
-var Entity = function(sprite, x, y, vx, vy) {
+var Entity = function(sprite, x, y, vx, vy, id) {
     this.sprite = sprite;
     this.x = x;
     this.y = y;
@@ -14,10 +14,11 @@ var Entity = function(sprite, x, y, vx, vy) {
     this.bounceFactor =1;
     this.hitRect = { 'x':0, 'y':0, 'w':0, 'h':0, 'cx':0, 'cy':0 };
     this.level= 0;
-    this.tileTop;
-    this.tileBottom;
-    this.tileLeft;
-    this.tileRight;
+    this.tileTop = 0;
+    this.tileBottom = 0;
+    this.tileLeft = 0;
+    this.tileRight = 0;
+    this.id = id;
 };
 
 //calculate the angle that the sprite should be rotated in order to create
@@ -96,16 +97,16 @@ Entity.prototype.customRenderOperation = function() {
     //noop
 };
 
-// Update the entitie's position, required method for game
+// Update the entity's position, required method for game
 // Parameter: dt, a time delta between ticks
 Entity.prototype.update = function(dt) {
     var epsilon = 5;
     var entityMoved = false;
 
-    this.tileTop = Math.floor(this.hitTop()/mapTileHeight);
-    this.tileBottom = Math.floor(this.hitBottom()/mapTileHeight);
-    this.tileLeft = Math.floor(this.hitLeft()/mapTileWidth);
-    this.tileRight = Math.floor(this.hitRight()/mapTileWidth);
+    oldTop = Math.floor(this.hitTop()/mapTileHeight);
+    oldBottom = Math.floor(this.hitBottom()/mapTileHeight);
+    oldLeft = Math.floor(this.hitLeft()/mapTileWidth);
+    oldRight = Math.floor(this.hitRight()/mapTileWidth);
 
     if(Math.abs(this.vx) > epsilon)
     {
@@ -121,8 +122,8 @@ Entity.prototype.update = function(dt) {
 
         //if player hasn't moved to a new tile or is in the top level skip collision check.
         if (tileXStart != tileXEnd && map.length - 1 > this.level) {
-            hit1 = map[this.level + 1][numCols*this.tileTop + tileXEnd]!= '.';
-            hit2 = map[this.level + 1][numCols*this.tileBottom + tileXEnd]!= '.';
+            hit1 = map[this.level + 1][numCols*oldTop + tileXEnd]!= '.';
+            hit2 = map[this.level + 1][numCols*oldBottom + tileXEnd]!= '.';
         }
 
         if(hit1 || hit2) {
@@ -141,6 +142,9 @@ Entity.prototype.update = function(dt) {
         this.vx = 0;
     }
 
+    this.tileLeft = Math.floor(this.hitLeft()/mapTileWidth);
+    this.tileRight = Math.floor(this.hitRight()/mapTileWidth);
+
     if (Math.abs(this.vy) > epsilon)
     {
         var ystart = this.vy < 0? this.hitTop(): this.hitBottom();
@@ -154,8 +158,8 @@ Entity.prototype.update = function(dt) {
 
         //if player hasn't moved to a new tile or is in the top level skip collision check.
         if (tileYStart != tileYEnd && map.length-1 > this.level) {
-            hit1 = map[this.level + 1][numCols*tileYEnd + this.tileLeft]!= '.';
-            hit2 = map[this.level + 1][numCols*tileYEnd + this.tileRight]!= '.';
+            hit1 = map[this.level + 1][numCols*tileYEnd + oldLeft]!= '.';
+            hit2 = map[this.level + 1][numCols*tileYEnd + oldRight]!= '.';
         }
 
         if(hit1 || hit2) {
@@ -171,11 +175,62 @@ Entity.prototype.update = function(dt) {
     else {
         this.vy = 0;
     }
+
+    this.tileTop = Math.floor(this.hitTop()/mapTileHeight);
+    this.tileBottom = Math.floor(this.hitBottom()/mapTileHeight);
+
+    if(oldBottom != this.tileBottom) {
+        this.updateEntityList(oldBottom);
+    }
+
     return entityMoved;
 };
 
+/*
+ * Updates the entityList data structure which is needed to render the game
+ * elements (e.g. tiles, objects, entities) in the proper order.
+ */
+Entity.prototype.updateEntityList = function(oldRow) {
+
+    var level = this.level +1;
+    var row = this.tileBottom;
+    var id = this.id;
+
+    //remove old entry if it exists
+    if(level in entityList && oldRow in entityList[level]) {
+        var index = entityList[level][oldRow].indexOf(id);
+        if(index != -1) {
+            entityList[level][oldRow].splice(index, 1);
+        }
+
+        if(entityList[level][oldRow].length == 0) {
+            delete entityList[level][oldRow];
+            if(Object.keys(entityList[level]).length == 0) {
+                delete entityList[level];
+            }
+        }
+    }
+
+
+    //add current entry
+    if(level in entityList) {
+        if(row in entityList[level]) {
+            entityList[level][row].push(id);
+        }
+        else {
+            entityList[level][row] = [id];
+        }
+    }
+    else {
+        entityList[level] = new Object();
+        entityList[level][row] = new Array();
+        entityList[level][row] = [id];
+    }
+
+};
+
 // Enemies our player must avoid
-var Enemy = function(x,y, vx, vy) {
+var Enemy = function(x,y, vx, vy, id) {
     this.radarType = {
                         SQUARE: 0,
                         TRIANGLE: 1
@@ -186,7 +241,7 @@ var Enemy = function(x,y, vx, vy) {
                             CHASING: 1
                          };
 
-    Entity.call(this, "images/enemy-bug.png", x, y, vx, vy);
+    Entity.call(this, "images/enemy-bug.png", x, y, vx, vy, id);
     this.state = this.behaviourType.ROAMING;
     this.radarRange = 100;
     this.radarType = this.radarType.SQUARE;
@@ -196,6 +251,7 @@ var Enemy = function(x,y, vx, vy) {
     this.hitRect.h = 75;
     this.hitRect.cx = 50;
     this.hitRect.cy = 109;
+    this.update(0);
 };
 
 Enemy.prototype = Object.create(Entity.prototype);
@@ -221,19 +277,21 @@ Enemy.prototype.customRenderOperation = function(ctx) {
 // a handleInput() method.
 
 var Player = function(x, y) {
-    Entity.call(this, "images/char-boy.png", x, y, 0, 0);
+    Entity.call(this, "images/char-boy.png", x, y, 0, 0, 256);
     this.vmag = 100;
     this.attenuation = 0.98;
     //lose momentum after bounce
     this.bounceFactor = 0.25;
     this.hitRect.x = 15;
-    this.hitRect.y = 70;
+    this.hitRect.y = 105;
     this.hitRect.w = 72;
-    this.hitRect.h = 70;
+    this.hitRect.h = 35;
     this.hitRect.cx = 50;
     this.hitRect.cy = 120;
     this.x-=this.hitRect.cx;
     this.y-=this.hitRect.cy;
+    this.update(0);
+    this.updateEntityList(-1);
 };
 
 Player.prototype = Object.create(Entity.prototype);
@@ -265,10 +323,12 @@ Player.prototype.alignAngle = function() {
 // Now instantiate your objects.
 // Place all enemy objects in an array called allEnemies
 // Place the player object in a variable called player
-var allEnemies = [];
+var allEntities = new Object();
 var numEnemies = 10;
 var player;
 var debug = true;
+//used to handle required render order
+var entityList = new Object();
 
 var initAppStuff = function()
 {
@@ -279,12 +339,16 @@ var initAppStuff = function()
 
     for (i = 0; i < numEnemies; i++) {
         var basev = 100;
-        allEnemies.push(new Enemy(
-                                    150 + 30*i,
-                                    200 + i*120,
-                                    (i%2*-2+1)*(basev + 10*i),
-                                    (i%2*2-1)*(basev + 10*i)));
+
+        allEntities[i] = new Enemy(
+                            150 + 30*i,
+                            200 + i*120,
+                            (i%2*-2+1)*(basev + 10*i),
+                            (i%2*2-1)*(basev + 10*i),
+                            i);
     }
+
+    allEntities[256] = player;
 
     // This listens for key presses and sends the keys to your
     // Player.handleInput() method. You don't need to modify this.

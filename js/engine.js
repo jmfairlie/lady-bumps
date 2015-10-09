@@ -25,18 +25,20 @@ var Engine = (function(global) {
         ctx = canvas.getContext('2d'),
         lastTime;
 
-    canvas.width = 505;
-    canvas.height = 606;
+    canvas.width = 600;
+    canvas.height = 805;
     doc.body.appendChild(canvas);
     var map;
+    var shadow_map;
     var map_tiles;
     var item_tiles;
+    var shadow_tiles;
     var numCols;
     var numRows;
     var spriteWidth = 101;
     var spriteHeight = 171;
     var mapTileWidth = 101;
-    var mapTileHeight = 83;
+    var mapTileHeight = 81;
     var mapTileTopGap = 50;
     var levelOffset = 41;
     //absolute location where the player sprite will appear on the screen
@@ -92,9 +94,90 @@ var Engine = (function(global) {
     function init() {
         reset();
         lastTime = Date.now();
-        updatePOV();
+        updateViewPort();
         render();
         main();
+    }
+
+/*
+ * fills up the shadow_map data structure which contains the information
+ * of where in the map to draw shadows. These calculations are based on
+ * the topography of the tile maps.
+ * This logic is mostly an implementation of the algorithm described here:
+ * http://lunar.lostgarden.com/uploaded_images/PlanetCuteShadowTest-734680.jpg
+ */
+    function createShadowMap() {
+        shadow_map = new Array();
+        var c, r, top, shadows,t1,t2, special, valid, any, temp, se;
+
+        for(level=0; level< map.length; level++) {
+            shadow_map.push(new Array());
+            for(row=0; row < numRows; row++) {
+                for(col=0; col< numCols; col++) {
+                    shadows = null;
+                    top = level < (map.length - 1) && map[level+1][row*numCols + col]>='A';
+                    tile = map[level][row*numCols + col]>='A';
+
+                    if(tile)
+                    {
+                        temp = []
+                        any = false;
+                        s = (row + 1) < numRows &&
+                             map[level][(row+1)*numCols + col]!='.';
+
+
+                        se = !s && (row + 1) < numRows && (col - 1)>= 0 &&
+                             map[level][(row+1)*numCols + col - 1]!='.'
+
+                        ds = (row + 1) < numRows && (level - 1) >= 0 && level == 1 &&
+                             map[level-1][(row+1)*numCols + col] !='.';
+
+                        ss = !s && ds;
+                        any = any || se || ss;
+                        temp.push(se);
+                        temp.push(ss);
+
+                        if(!top && level < map.length - 1) {
+                            for(i=-1; i< 2; i++) {
+                                for(j=-1; j< 2; j++) {
+                                    var center = j==0 && i== 0;
+                                    if(!center)
+                                    {
+                                        var intercardinal = j!=0 && i!= 0;
+                                        special = true;
+                                        c = col + i;
+                                        r = row + j;
+
+                                        valid = c >= 0 &&
+                                                c < numCols &&
+                                                r >= 0 &&
+                                                r < numRows;
+
+                                        if(intercardinal && valid) {
+                                            t1 = map[level+1][r*numCols + col]=='.';
+                                            t2 = map[level+1][row*numCols + c]=='.';
+                                            special = t1&&t2;
+                                        }
+
+                                        var result = valid &&
+                                                     map[level+1][r*numCols + c]>='A' &&
+                                                     special;
+
+                                        any = any || result;
+                                        temp.push(result);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (any) {
+                            shadows = temp;
+                        }
+                    }
+                    shadow_map[level].push(shadows);
+                }
+            }
+        }
     }
 
     /* This function is called by main (our game loop) and itself calls all
@@ -119,17 +202,31 @@ var Engine = (function(global) {
      * render methods.
      */
     function updateEntities(dt) {
-        var entitiesMoved = false;
-        allEnemies.forEach(function(enemy) {
-            entitiesMoved =  enemy.update(dt) || entitiesMoved;
-        });
-        var playerMoved = player.update(dt);
-        entitiesMoved = entitiesMoved || playerMoved;
+        var entitiesMoved = false,
+            playerMoved = false,
+            visible,
+            entity;
+        for (var key in allEntities) {
+            if(key == 256) {
+                playerMoved = allEntities[key].update(dt);
+            }
+            else
+            {
+                entity = allEntities[key];
+                visible =  entity.tileTop < rowEnd &&
+                           entity.tileBottom >= rowStart &&
+                           entity.tileRight >= colStart &&
+                           entity.tileLeft < colEnd;
+                entitiesMoved =  (entity.update(dt) && visible) || entitiesMoved;
+            }
+        }
+
         if(playerMoved)
         {
-            updatePOV();
+            updateViewPort();
         }
-        return entitiesMoved;
+
+        return entitiesMoved || playerMoved;
     }
 
     /*
@@ -137,29 +234,33 @@ var Engine = (function(global) {
      *  (1) where in the screen the player will be located and,
      *  (2) which tiles from the entire map are visible based on player location
      */
-    function updatePOV() {
-
-        if ( player.x + player.sw/2 < canvas.width/2) {
+    function updateViewPort() {
+        /*
+         * player normally is centered in the middle of the canvas but if he
+         * gets close to the edges of the map then it will move to meet this
+         * edges. The idea is to never show anything beyond the map.
+         */
+        if ( player.x + player.hitRect.cx < canvas.width/2) {
             playerAbsolutePosX = player.x;
         }
-        else if( player.x + player.sw/2 > numCols*mapTileWidth - canvas.width/2) {
+        else if( player.x + player.hitRect.cx > numCols*mapTileWidth - canvas.width/2) {
             playerAbsolutePosX =  canvas.width + player.x - numCols*mapTileWidth;
         }
         else {
-            playerAbsolutePosX = (canvas.width - player.sw)/2;
+            playerAbsolutePosX = canvas.width/2 - player.hitRect.cx;
         }
 
-        if ( player.y + player.sh*2/3 < canvas.height/2) {
+        if ( player.y + player.hitRect.cy < canvas.height/2) {
             playerAbsolutePosY = player.y;
         }
-        else if( player.y + player.sh*2/3 > numRows*mapTileHeight - canvas.height/2) {
+        else if( player.y + player.hitRect.cy > numRows*mapTileHeight - canvas.height/2) {
             playerAbsolutePosY =  canvas.height + player.y - numRows*mapTileHeight;
         }
         else {
-            playerAbsolutePosY = canvas.height/2 - player.sh*2/3;
+            playerAbsolutePosY = canvas.height/2 - player.hitRect.cy;
         }
 
-        //don't render all tiles but just those that are visible
+        //range of tiles that are visible at the moment
         colStart = Math.floor(Math.max(0, player.x - playerAbsolutePosX)/mapTileWidth),
         colEnd = Math.floor(Math.min((numCols -1)*mapTileWidth, player.x + canvas.width - playerAbsolutePosX)/mapTileWidth) + 1,
         rowStart = Math.floor(Math.max(0, player.y - playerAbsolutePosY)/mapTileHeight),
@@ -174,11 +275,57 @@ var Engine = (function(global) {
             {
                 ctx.beginPath();
                 ctx.globalAlpha=0.4;
-                ctx.rect(col * mapTileWidth, row * mapTileHeight + mapTileTopGap, mapTileWidth, mapTileHeight);
+                ctx.rect(col * mapTileWidth,
+                            row * mapTileHeight + mapTileTopGap,
+                            mapTileWidth,
+                            mapTileHeight);
+
                 ctx.fillStyle = color;
                 ctx.closePath();
                 ctx.fill();
                 ctx.globalAlpha=1;
+            }
+        }
+    }
+
+    /* This function is called by the render function. It's purpose is to then
+     * call the render functions you have defined on your enemy and player
+     * entities within app.js
+     */
+    function renderEntities(entityArr) {
+        ctx.save();
+        ctx.translate(0, levelOffset);
+        var entity;
+        for(i = 0; i < entityArr.length; i++) {
+            entity = allEntities[entityArr[i]];
+            if(entity.tileTop < rowEnd &&
+               entity.tileBottom >= rowStart &&
+               entity.tileRight >= colStart &&
+               entity.tileLeft < colEnd)
+            {
+                entity.render();
+            }
+        }
+        ctx.restore();
+    }
+
+    //renders a single tile
+    function renderTile(level, row, col) {
+        var tile = map[level][row*numCols + col];
+        //skip empty spaces in map
+        if(tile != ".") {
+            var tileImg = Resources.get(map_tiles[tile]);
+            ctx.save();
+            ctx.translate(col * mapTileWidth,row * mapTileHeight);
+            ctx.drawImage(tileImg,0,0);
+            ctx.restore();
+            if(debug) {
+                //highlight the tiles the player is stepping on
+                hilightTiles(player, level, row, col, ctx, 'yellow');
+                //draw tile coords
+                ctx.fillStyle = 'magenta';
+                ctx.font = "15px serif";
+                ctx.fillText("("+Math.floor(col)+", "+Math.floor(row)+", "+level+")", col * mapTileWidth + 20, row * mapTileHeight+100);
             }
         }
     }
@@ -191,102 +338,62 @@ var Engine = (function(global) {
      */
     function render() {
 
+        var numLevels = map.length,
+            populated = false,
+            tile,
+            tileImg,
+            entityArr;
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
-            ctx.translate(playerAbsolutePosX - player.x,
-                          playerAbsolutePosY - player.y);
+        ctx.translate(playerAbsolutePosX - player.x,
+                      playerAbsolutePosY - player.y);
 
-            renderMap(rowStart,
-                      rowEnd,
-                      colStart,
-                      colEnd,
-                      0,
-                      map.length,
-                      1,
-                      debug);
+        for (level = 0; level < numLevels; level++) {
+            inLevel = level in entityList;
 
-            renderEntities();
-            renderFakeZDepth();
-        ctx.restore();
-    }
+            ctx.save();
+            ctx.translate(0, -levelOffset*level);
 
-    function renderMap(ri, rf, ci, cf, li, lf, alpha, debug)
-    {
-        var row,col, level;
-        /* Loop through the number of rows and columns we've defined above
-         * and, using the tiles and map arrays, draw the correct image for that
-         * portion of the "grid"
-         */
-        ctx.save();
-        ctx.globalAlpha=alpha;
-        ctx.translate(0, -mapTileTopGap);
-        for (row = ri; row < rf; row++) {
-            for (col = ci; col < cf; col++) {
-                for (level = li; level < lf ; level++)
-                {
-                    var tile = map[level][row*numCols + col];
-                    //skip empty spaces in map
-                    if(tile != ".") {
-                        var tileURL = Resources.get(map_tiles[tile]);
-                        ctx.save();
-                        ctx.translate(0, -levelOffset*level);
-                        ctx.drawImage(tileURL,
-                                          col * mapTileWidth,
-                                          row * mapTileHeight);
-                        if(debug) {
-                            //highlight the tiles the player is stepping on
-                            hilightTiles(player, level, row, col, ctx, 'yellow');
-                            //draw tile coords
-                            ctx.fillStyle = 'magenta';
-                            ctx.font = "15px serif";
-                            ctx.fillText("("+Math.floor(col)+", "+Math.floor(row)+", "+level+")", col * mapTileWidth + 20, row * mapTileHeight+100);
-                        }
-                        ctx.restore();
-                    }
+            for (row = rowStart; row < rowEnd; row++) {
+
+                for (col = colStart; col < colEnd; col++) {
+                    ctx.save();
+                    ctx.translate(0, -mapTileTopGap);
+                    renderTile(level, row, col);
+                    renderTileShadows(level, row, col);
+                    ctx.restore();
+                }
+
+                inRow = inLevel && row in entityList[level];
+
+                if(inRow) {
+                    entityArr = entityList[level][row];
+                    renderEntities(entityArr);
                 }
             }
+
+            ctx.restore();
         }
+
         ctx.restore();
     }
 
-    /* This function is called by the render function and is called on each game
-     * tick. It's purpose is to then call the render functions you have defined
-     * on your enemy and player entities within app.js
-     */
-    function renderEntities() {
-        /* Loop through all of the objects within the allEnemies array and call
-         * the render function you have defined.
-         */
-        player.render();
-        allEnemies.forEach(function(enemy) {
-            {
-                enemy.render();
-            }
-
-        });
-    }
-
-    function renderFakeZDepth() {
-        redrawFrontTiles(player);
-        allEnemies.forEach(function(enemy) {
-            redrawFrontTiles(enemy);
-        });
-    }
-
-    function redrawFrontTiles(entity) {
-        if(entity.tileBottom + 1 < rowEnd &&
-           entity.tileBottom + 1 >= rowStart &&
-           entity.tileRight >= colStart &&
-           entity.tileLeft < colEnd &&
-           entity.level + 1 < map.length)
+    //renders the shadows of a specic tile
+    function renderTileShadows(level, row, col) {
+        var shadows = shadow_map[level][row*numCols + col];
+        if(shadows)
         {
-            var ri = entity.tileBottom + 1,
-                rf = rowEnd,
-                ci = Math.max(colStart, entity.tileLeft),
-                cf = Math.min(colEnd, entity.tileRight + 1),
-                li = entity.level + 1;
-                lf = map.length;
-            renderMap(ri, rf, ci, cf, li, lf, 1, true);
+            for(i=0; i < shadows.length; i++) {
+                if(shadows[i]) {
+                    var shadowURL = shadow_tiles[i];
+                    var shadowImg = Resources.get(shadowURL);
+                    ctx.drawImage(
+                                    shadowImg,
+                                    col * mapTileWidth,
+                                    row * mapTileHeight);
+                }
+            }
         }
     }
 
@@ -296,74 +403,74 @@ var Engine = (function(global) {
      */
     function reset() {
         var level1 =
-               "BBBBBBBBBBBBBBBBBBBB\
-                .GGGGGGGGGGGGGGGGGGG\
-                .CCCCCCCCCCCCCCCCCC.\
-                .CCCCCCCCCCCCCCCCCC.\
-                .CCCCCCCCCCCCCCCCCC.\
+               "BBBBBBBBBBBBBBBGGGGG\
+                GGGBBBGGGBBBBBBGGGGG\
+                GCGGGBGGCCBBBCCCCCC.\
+                GCCCGGGCCCCCBCCCCCC.\
+                .CCCCGGCCCCCCCCCCCC.\
+                GCCCGGGGGGGGGGGGCCC.\
                 .CCCGGGGGGGGGGGGCCC.\
+                GCCCGGGGGGGGGGGGCCC.\
                 .CCCGGGGGGGGGGGGCCC.\
+                GCCCGGGGGGGGGGGGCCC.\
                 .CCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
-                .CCCGCCGGGGGGCCGCCC.\
+                GCCCGCCGGGGGGCCGCCC.\
                 .CCCGCCGGCCGGCCGCCC.\
+                GCCCGGGCCGGCCGGGCCC.\
                 .CCCGGGCCGGCCGGGCCC.\
-                .CCCGGGCCGGCCGGGCCC.\
+                GCCCGGGGGCCGGGGGCCC.\
                 .CCCGGGGGCCGGGGGCCC.\
-                .CCCGGGGGCCGGGGGCCC.\
+                GCCCGGGGGGGGGGGGCCC.\
                 .CCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGCGGGGGCCC.\
+                GCCCGGGGGGCGGGGGCCC.\
                 .CCCGGGGGCCCGGGGCCC.\
-                .CCCGGGGGGCGGGGGCCC.\
+                GCCCGGGGGGCGGGGGCCC.\
                 .CCCGGCCCCCCCCCGCCC.\
-                .CCCGGGGCCCCCGGGCCC.\
+                GCCCGGGGCCCCCGGGCCC.\
                 .CCCGGGGGCCCGGGGCCC.\
-                .CCCGGGGGCCCGGGGCCC.\
+                GCCCGGGGGCCCGGGGCCC.\
                 .CCCGGGGGCGCGGGGCCC.\
+                GCCCGGGGGCGCGGGGCCC.\
                 .CCCGGGGGCGCGGGGCCC.\
-                .CCCGGGGGCGCGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
+                GCCCGGGGGGGGGGGGCCC.\
                 .CCCCCCCCCCCCCCCCCC.\
+                GCCCCCCCCCCCCCCCCCC.\
                 .CCCCCCCCCCCCCCCCCC.\
-                .CCCCCCCCCCCCCCCCCC.\
-                ....................";
+                G...................";
 
         var level2 =
-               "....................\
-                MMMMMMMMMMMMMMMMMMMM\
-                M..................M\
-                M.........F.....I..M\
-                M......F...........M\
-                M..................M\
-                M...............I..M\
-                M........CC........M\
-                M........CC........M\
-                M........CCCC......M\
+               "...............11111\
+                111...111......F...1\
+                M..11.1..F...FF....M\
+                1....1....FF.F.....M\
+                M...........F....F.M\
+                1...M..........FF..M\
+                M..............FF..M\
+                1........C.....FF..M\
+                M........C.........M\
+                1........CCCC......M\
                 M......CCCC........M\
-                M........CC........M\
-                M........CC....D...M\
-                M....I.............M\
+                1.........C.....F..M\
+                M.........C....F...M\
+                1....I.............M\
                 M..................M\
-                M.......D.....D....M\
-                M..................M\
-                M..................M\
+                1.......F.....F....M\
+                M..........2.......M\
+                1..................M\
                 M....F......F......M\
+                1...............2..M\
+                M.........F........M\
+                1..................M\
+                M......1.......F...M\
+                1..................M\
                 M..................M\
-                M..................M\
-                M..................M\
-                M........F.....D...M\
-                M..................M\
-                M..................M\
-                M...I..............M\
+                1...I..............M\
                 M..............F...M\
+                1..................M\
                 M..................M\
+                1.....F......F.....M\
                 M..................M\
-                M.....F.......D....M\
-                M..................M\
-                M.........I........M\
+                1.........I........M\
                 M..................M\
                 MMMMMMMMMMMMMMMMMMMM";
 
@@ -375,12 +482,11 @@ var Engine = (function(global) {
                 ....................\
                 ....................\
                 ....................\
-                .........CC.........\
-                .........CC.........\
-                .........CCCC.......\
-                .......CCCC.........\
-                .........CC.........\
-                .........CC.........\
+                ....................\
+                .........C..........\
+                .........CCC........\
+                ........CCC.........\
+                ..........C.........\
                 ....................\
                 ....................\
                 ....................\
@@ -398,6 +504,7 @@ var Engine = (function(global) {
                 ....................\
                 ....................\
                 ....................\
+                .......I....I.......\
                 ....................\
                 ....................\
                 ....................\
@@ -411,12 +518,10 @@ var Engine = (function(global) {
                 ....................\
                 ....................\
                 ....................\
+                ....................\
+                ....................\
                 .........CC.........\
                 .........CC.........\
-                .........CCCC.......\
-                .......CCCC.........\
-                .........CC.........\
-                .........CC.........\
                 ....................\
                 ....................\
                 ....................\
@@ -434,6 +539,44 @@ var Engine = (function(global) {
                 ....................\
                 ....................\
                 ....................\
+                ....................\
+                ........F..F........\
+                ....................\
+                ....................\
+                ....................\
+                ....................";
+
+    var level5 =
+               "....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ..........I.........\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                ....................\
+                .........II.........\
                 ....................\
                 ....................\
                 ....................\
@@ -444,14 +587,16 @@ var Engine = (function(global) {
         level2 = level2.replace(/\s+/g,"");
         level3 = level3.replace(/\s+/g,"");
         level4 = level4.replace(/\s+/g,"");
+        level5 = level5.replace(/\s+/g,"");
 
         map =
             [
                 level1,
                 level2,
                 level3,
-                level4
-            ]
+                level4,
+                level5
+            ];
 
         map_tiles = {
                       'A': 'images/ramp-west.png',
@@ -467,14 +612,30 @@ var Engine = (function(global) {
                       'K': 'images/ramp-north.png',
                       'L': 'images/ramp-south.png',
                       'M': 'images/wall-block.png',
-                      'O': 'images/wall-block-tall.png'
+                      'O': 'images/wall-block-tall.png',
+                      '1': 'images/tree-short.png',
+                      '2': 'images/tree-tall.png',
+                      '3': 'images/tree-ugly.png',
                     };
 
         item_tiles = {
                         '1': 'images/tree-short.png',
                         '2': 'images/tree-tall.png',
                         '3': 'images/tree-ugly.png'
-                     }
+                     };
+
+        shadow_tiles = [
+            'images/shadow-side-west.png',
+            'images/shadow-side-south.png',
+            'images/shadow-north-west.png',
+            'images/shadow-west.png',
+            'images/shadow-south-west.png',
+            'images/shadow-north.png',
+            'images/shadow-south.png',
+            'images/shadow-north-east.png',
+            'images/shadow-east.png',
+            'images/shadow-south-east.png'
+        ];
 
         numCols = 20;
         numRows = map[0].length/numCols;
@@ -482,6 +643,9 @@ var Engine = (function(global) {
         global.numCols = numCols;
         global.numRows = numRows;
         global.map = map;
+
+
+        createShadowMap();
     }
 
     /* Go ahead and load all of the images we know we're going to need to
@@ -514,6 +678,7 @@ var Engine = (function(global) {
         'images/shadow-south.png',
         'images/shadow-south-east.png',
         'images/shadow-south-west.png',
+        'images/shadow-side-south.png',
         'images/shadow-west.png',
         'images/wall-block.png',
         'images/wall-block-tall.png'
