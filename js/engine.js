@@ -1,19 +1,3 @@
-/* Engine.js
- * This file provides the game loop functionality (update entities and render),
- * draws the initial game board on the screen, and then calls the update and
- * render methods on your player and enemy objects (defined in your app.js).
- *
- * A game engine works by drawing the entire game screen over and over, kind of
- * like a flipbook you may have created as a kid. When your player moves across
- * the screen, it may look like just that image/character is moving or being
- * drawn but that is not the case. What's really happening is the entire "scene"
- * is being drawn over and over, presenting the illusion of animation.
- *
- * This engine is available globally via the Engine variable and it also makes
- * the canvas' context (ctx) object globally available to make writing app.js
- * a little simpler to work with.
- */
-
 var Engine = (function(global) {
     /* Predefine the variables we'll be using within this scope,
      * create the canvas element, grab the 2D context for that canvas
@@ -23,13 +7,16 @@ var Engine = (function(global) {
         win = global.window,
         canvas = doc.createElement('canvas'),
         ctx = canvas.getContext('2d'),
-        lastTime;
+        lastTime, gameStartTime;
 
     canvas.width = 600;
     canvas.height = 805;
     doc.body.appendChild(canvas);
+
     var map;
     var shadow_map;
+
+
     var map_tiles;
     var item_tiles;
     var shadow_tiles;
@@ -41,6 +28,7 @@ var Engine = (function(global) {
     var mapTileHeight = 81;
     var mapTileTopGap = 50;
     var levelOffset = 41;
+
     //absolute location where the player sprite will appear on the screen
     var playerAbsolutePosX;
     var playerAbsolutePosY;
@@ -50,32 +38,177 @@ var Engine = (function(global) {
         colEnd,
         rowStart,
         rowEnd;
+    //to keep track of the state of the game
+    var gameState = {
+                current: null,
+                type: {
+                        IN_GAME:0,
+                        GAME_FINISHED:1,
+                        GAME_MENU: 2,
+                        GAME_MENU_HIDE: 3,
+                        GAME_MENU_FADEIN: 4,
+                        GAME_MENU_FADEOUT: 5
+                    }
+                }
 
-    global.mapTileWidth = mapTileWidth;
-    global.mapTileHeight = mapTileHeight;
+    var genericTimeStamp;
+    var menuButton;
+
+    //button class used in the menu.
+    //TODO:  this is very impractical and hacky. Replace with something else.
+    var Button = function(x, y, width, height, color, hovercolor, strokecolor,
+        linewidth, text, textcolor, font, textstrokecolor, textstrokewidth, callback) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.color = color;
+        this.hovercolor = hovercolor;
+        this.strokecolor = strokecolor;
+        this.linewidth = linewidth;
+        this.text = text;
+        this.textcolor = textcolor;
+        this.font = font;
+        this.fontsize = Math.floor(height*0.8);
+        this.textstrokecolor = textstrokecolor;
+        this.callback = callback;
+        this.hover = false;
+    };
+
+    Button.prototype.render = function() {
+        var radius = this.height/2;
+        var currcolor = (this.hover)?this.hovercolor:this.color;
+
+        renderArc(this.x + radius, this.y + this.height/2, radius, currcolor,
+            this.strokecolor, this.linewidth, 1, 0, Math.PI*2);
+        renderArc(this.x + this.width - radius, this.y + this.height/2, radius,
+            currcolor, this.strokecolor, this.linewidth, 1, 0, Math.PI*2);
+        renderSquare(this.x + radius, this.y, this.width - 2*radius, this.height,
+            currcolor, this.strokecolor, this.linewidth, 1);
+        renderSquare(this.x + radius - this.linewidth, this.y + this.linewidth/2,
+            this.width - 2*radius + 2*this.linewidth, this.height - this.linewidth,
+            currcolor, null, 0, 1);
+
+        text_dims = queryTextDims(this.text, this.fontsize+"px "+this.font);
+        renderText(this.x + (this.width - text_dims.width)/2,
+            this.y + this.height/2 + this.fontsize/3 , this.text,
+            this.textstrokewidth, this.font, this.fontsize, this.textcolor,
+            this.textstrokecolor);
+    };
+
+    Button.prototype.onMouseMove = function(e) {
+
+        var coords = getEventCoords(e);
+        this.hover = coords.x > this.x &&
+        coords.x < (this.x + this.width) &&
+        coords.y > this.y &&
+        coords.y < (this.y + this.height);
+    };
+
+    Button.prototype.onMouseDown = function(e) {
+        var coords = getEventCoords(e);
+        var clicked = coords.x > this.x &&
+                    coords.x < (this.x + this.width) &&
+                    coords.y > this.y &&
+                    coords.y < (this.y + this.height);
+        if(clicked) {
+            this.callback();
+        }
+    };
+
+    //super hack. Factor away...
+    function getEventCoords(e) {
+        var rect = canvas.getBoundingClientRect();
+        return {
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top + canvas.height/2
+                };
+    };
+
+    //helper function
+    function rgbcolor(r, g, b){
+      return "rgb("+Math.min(r, 255)+","+Math.min(g, 255)+","+Math.min(b, 255)+")";
+    }
 
     /* This function serves as the kickoff point for the game loop itself
      * and handles properly calling the update and render methods.
      */
     function main() {
-        /* Get our time delta information which is required if your game
-         * requires smooth animation. Because everyone's computer processes
-         * instructions at different speeds we need a constant value that
-         * would be the same for everyone (regardless of how fast their
-         * computer is) - hurray time!
-         */
+
         var now = Date.now(),
-            dt = (now - lastTime) / 1000.0;
+        dt = (now - lastTime) / 1000.0;
+        //TODO: this state machine logic is quite convoluted and impractical. Needs refactoring.
+        switch (gameState.current) {
 
-        /* Call our update/render functions, pass along the time delta to
-         * our update function since it may be used for smooth animation.
-         */
-        if(update(dt))
-        {
-            render();
-        }
+            case gameState.type.IN_GAME:
+                update(dt);
+                render();
+                renderUI();
 
+                if (player.life == 0 ||
+                    player.gemcount == numItems ||
+                    (now - gameStartTime)/1000 >= timer)
+                {
+                    gameState.current = gameState.type.GAME_FINISHED;
+                    genericTimeStamp = now;
+                }
 
+            break;
+            case gameState.type.GAME_FINISHED:
+                var duration = 3, start_opacity = 0, end_opacity = 0.9, color = 'black';
+
+                render();
+                update(dt);
+
+                if (renderFade(genericTimeStamp, duration, start_opacity, end_opacity, color)) {
+                    initGameMenu();
+                }
+
+            break;
+
+            case gameState.type.GAME_MENU:
+                var bgcolor= 'black', duration = 0.5, opacity = 0.9;
+                render();
+                update(dt);
+                renderMenu(genericTimeStamp, duration, bgcolor, opacity, 0, canvas.height/2 );
+            break;
+
+            case gameState.type.GAME_MENU_HIDE:
+                var bgcolor= 'black', duration = 0.5, opacity = 0.9;
+                render();
+                update(dt);
+                if(renderMenu(genericTimeStamp, duration, bgcolor, opacity, canvas.height/2, 0)) {
+                        gameState.current = gameState.type.GAME_MENU_FADEIN;
+                        genericTimeStamp = now;
+                }
+
+            break;
+
+            case gameState.type.GAME_MENU_FADEIN:
+                var duration = 1, start_opacity = 0.9, end_opacity = 1, color = 'black';
+
+                render();
+                update(dt);
+
+                if (renderFade(genericTimeStamp, duration, start_opacity, end_opacity, color)) {
+                    reset();
+                    genericTimeStamp = now;
+                    gameState.current = gameState.type.GAME_MENU_FADEOUT;
+                }
+            break;
+
+            case gameState.type.GAME_MENU_FADEOUT:
+                var duration = 3, start_opacity = 1, end_opacity =0 , color = 'black';
+
+                render();
+
+                if (renderFade(genericTimeStamp, duration, start_opacity, end_opacity, color)) {
+                    gameStartTime = now;
+                    gameState.current = gameState.type.IN_GAME;
+                }
+
+            break;
+         }
         /* Set our lastTime variable which is used to determine the time delta
          * for the next time this function is called.
          */
@@ -93,10 +226,49 @@ var Engine = (function(global) {
      */
     function init() {
         reset();
+        initGameMenu();
         lastTime = Date.now();
-        updateViewPort();
-        render();
         main();
+    }
+
+/* Called everytime a new game starts*/
+    function initGameMenu() {
+        var button_width = canvas.width/3;
+        var font = 'Lobster';
+        menuButton = new Button((canvas.width - button_width)/2,
+            canvas.height + 100, button_width, button_width/4, '#333',
+            'red', 'white', 3, "Play",'white', font, 'black', 1,
+            function () {
+                gameState.current = gameState.type.GAME_MENU_HIDE;
+                genericTimeStamp = Date.now();
+                canvas.removeEventListener('mousemove',menuButtonHover,false);
+                canvas.removeEventListener('mousemove',menuButtonClick,false);
+            });
+
+        gameState.current = gameState.type.GAME_MENU;
+        genericTimeStamp = Date.now();
+
+        canvas.removeEventListener('mousemove',
+            menuButtonHover,
+            false);
+        canvas.addEventListener('mousemove',
+            menuButtonHover,
+            false);
+
+        canvas.removeEventListener('mousedown',
+            menuButtonClick,
+            false);
+        canvas.addEventListener('mousedown',
+            menuButtonClick,
+            false);
+    }
+
+    function menuButtonHover(e) {
+        menuButton.onMouseMove(e);
+    }
+
+    function menuButtonClick(e) {
+        menuButton.onMouseDown(e);
     }
 
 /*
@@ -180,24 +352,49 @@ var Engine = (function(global) {
         }
     }
 
+    /*
+     * randomly allocates collectable items (gems) in the map
+     *
+     */
+    function createItemMap() {
+        item_map = new Object();
+        //for now it's limited to the 1st level
+        for(level=1; level < 2; level ++) {
+            var spaces = map[level].split('.').length - 1,
+            index, random,row, col, gems, ind;
+
+            item_map[level] = new Object();
+
+            for (i = 0; i< numItems; i++)
+            {
+                random = Math.floor(Math.random()*spaces);
+                index = map[level].split('.', random).join('.').length;
+                row = Math.floor(index/numCols);
+                col = index% numCols;
+                if(!(row in item_map[level])) {
+                    item_map[level][row] = new Object();
+                    item_map[level][row][col] = new Object();
+                }
+                else if (!(col in item_map[level][row])) {
+                    item_map[level][row][col] = new Object();
+                }
+                gems = ['a', 'b', 'c'];
+                ind = Math.floor(Math.random()*3);
+                item_map[level][row][col] = gems[ind];
+            }
+        }
+    }
+
     /* This function is called by main (our game loop) and itself calls all
-     * of the functions which may need to update entity's data. Based on how
-     * you implement your collision detection (when two entities occupy the
-     * same space, for instance when your character should die), you may find
-     * the need to add an additional function call here. For now, we've left
-     * it commented out - you may or may not want to implement this
-     * functionality this way (you could just implement collision detection
-     * on the entities themselves within your app.js file).
+     * of the functions which may need to update entity's data.
      */
     function update(dt) {
         return updateEntities(dt);
-        // checkCollisions();
     }
 
     /* This is called by the update function  and loops through all of the
-     * objects within your allEnemies array as defined in app.js and calls
-     * their update() methods. It will then call the update function for your
-     * player object. These update methods should focus purely on updating
+     * objects within your allEntities array as defined in app.js and calls
+     * their update() methods. These update methods should focus purely on updating
      * the data/properties related to  the object. Do your drawing in your
      * render methods.
      */
@@ -207,6 +404,7 @@ var Engine = (function(global) {
             visible,
             entity;
         for (var key in allEntities) {
+            //256 is the player
             if(key == 256) {
                 playerMoved = allEntities[key].update(dt);
             }
@@ -268,22 +466,20 @@ var Engine = (function(global) {
         rowEnd = Math.min(numRows, Math.floor(Math.min((numRows-1)*mapTileHeight, player.y + canvas.height - playerAbsolutePosY)/mapTileHeight) + 3);
     }
 
+// hilight the tiles the entity is stepping on
     function hilightTiles(entity, level, row, col, ctx, color) {
         if(entity.level == level) {
             if((entity.tileTop  == row || entity.tileBottom == row) &&
               (entity.tileLeft == col || entity.tileRight  == col))
             {
-                ctx.beginPath();
-                ctx.globalAlpha=0.4;
-                ctx.rect(col * mapTileWidth,
+                renderSquare(col * mapTileWidth,
                             row * mapTileHeight + mapTileTopGap,
                             mapTileWidth,
-                            mapTileHeight);
-
-                ctx.fillStyle = color;
-                ctx.closePath();
-                ctx.fill();
-                ctx.globalAlpha=1;
+                            mapTileHeight,
+                            color,
+                            null,
+                            0,
+                            0.4);
             }
         }
     }
@@ -312,16 +508,25 @@ var Engine = (function(global) {
     //renders a single tile
     function renderTile(level, row, col) {
         var tile = map[level][row*numCols + col];
+        var item = !(level in item_map) ||
+                   !(row in item_map[level]) ||
+                   !(col in item_map[level][row])?'.': item_map[level][row][col];
+
         //skip empty spaces in map
-        if(tile != ".") {
-            var tileImg = Resources.get(map_tiles[tile]);
+        if(tile != "." || item !=".") {
+
+            var spriteURL = (tile!=".")?map_tiles[tile]: item_tiles[item];
+            var spriteImg = Resources.get(spriteURL);
+
             ctx.save();
+            if(tile != "." && level > (player.level +1) && row > player.tileTop && (col == player.tileLeft || col == player.tileRight))
+                ctx.globalAlpha = 0.5;
             ctx.translate(col * mapTileWidth,row * mapTileHeight);
-            ctx.drawImage(tileImg,0,0);
+            ctx.drawImage(spriteImg,0,0);
             ctx.restore();
+            //highlight the tiles the player is stepping on
+            hilightTiles(player, level, row, col, ctx, 'yellow');
             if(debug) {
-                //highlight the tiles the player is stepping on
-                hilightTiles(player, level, row, col, ctx, 'yellow');
                 //draw tile coords
                 ctx.fillStyle = 'magenta';
                 ctx.font = "15px serif";
@@ -330,19 +535,13 @@ var Engine = (function(global) {
         }
     }
 
-    /* This function initially draws the "game level", it will then call
-     * the renderEntities function. Remember, this function is called every
-     * game tick (or loop of the game engine) because that's how games work -
-     * they are flipbooks creating the illusion of animation but in reality
-     * they are just drawing the entire screen over and over.
+    /*
+     * renders tiles, enemies and player.
      */
     function render() {
 
         var numLevels = map.length,
-            populated = false,
-            tile,
-            tileImg,
-            entityArr;
+            entityArr, inLevel, inRow;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
@@ -397,198 +596,217 @@ var Engine = (function(global) {
         }
     }
 
+    //the in game UI
+    //TODO: refactor
+    function renderUI () {
+        renderLifeBar();
+        renderGemBar();
+        renderTimer();
+    }
+
+    //energy bar
+    //TODO refactor
+    function renderLifeBar() {
+        var maxlength = canvas.width*0.4;
+        var barheight = 30;
+        var bargap = 5;
+        var barpad = 15;
+        var life =  player.life/100;
+
+        ctx.beginPath();
+        ctx.rect(barpad,
+        barpad,
+        maxlength + bargap*2,
+        barheight + bargap*2);
+
+        ctx.strokeStyle = 'white';
+        ctx.closePath();
+        ctx.stroke();
+
+        if(life < 0.3) {
+            ctx.globalAlpha = blinkEffect(0.2, 4);
+        }
+
+        ctx.beginPath();
+        ctx.rect(barpad + bargap,
+                barpad + bargap,
+                maxlength*life,
+                barheight);
+
+        ctx.fillStyle = rgbcolor(life < 0.66?255:0, 255*(life> 0.33), 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        var tileImg = Resources.get('images/Heart.png');
+        ctx.save();
+        ctx.translate(maxlength + bargap*2 + barpad*2, -barpad);
+        ctx.scale(0.5, 0.5);
+        ctx.drawImage(tileImg,0,0);
+        ctx.restore();
+    }
+
+    //gem count
+    //TODO: refactor
+    function renderGemBar() {
+        var maxlength = canvas.width*0.4;
+        var barheight = 30;
+        var bargap = 5;
+        var barpad = 15;
+
+        var tileImg = Resources.get('images/Gem Blue.png');
+        ctx.save();
+        ctx.translate(maxlength + bargap*2 + barpad*4, -6*barpad - bargap);
+        ctx.fillStyle = '#f1d950';
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 3;
+        ctx.font = "40px Lobster";
+        ctx.strokeText("x"+ player.gemcount, 6*barpad, 10*barpad);
+        ctx.fillText("x"+ player.gemcount, 6*barpad, 10*barpad );
+        ctx.drawImage(tileImg,0,0);
+
+        ctx.restore();
+    }
+
+    //the timer animation
+    //TODO: refactor
+    function renderTimer() {
+        var maxlength = canvas.width*0.4;
+        var barheight = 30;
+        var bargap = 5;
+        var barpad = 15;
+        var seconds = (Date.now() - gameStartTime)/1000;
+
+        var left = timer - seconds;
+        var f = left/seconds;
+        var opacity = (left < 15)?blinkEffect(0.5,3):1;
+        var radius = 25;
+
+        ctx.save();
+        ctx.translate(maxlength + bargap*2 + barpad*20, 3*barpad - 10);
+        renderArc(0,0, radius, (left < 15)?'red':'white', null, null, opacity, 0, 2*Math.PI);
+        renderArc(0,0, radius, '#2c57f9', '#80bcff', 2, opacity, -Math.PI/2 + seconds/timer*2*Math.PI, Math.PI*1.5);
+        renderArc(0,0, radius + 5, null, 'white', 5, 1, 0, 2*Math.PI);
+        ctx.restore();
+    }
+    //hacky fade effect for menu/game transisions
+    //TODO: refactor
+    function renderFade(start, duration, start_opacity, end_opacity, color) {
+        var elapsed  = (Date.now() - start)/1000;
+        var done = elapsed > duration;
+        var opacity = done? end_opacity: start_opacity + (end_opacity - start_opacity)*elapsed/duration;
+        renderSquare(0,0, canvas.width, canvas.height, color, null, 0, opacity);
+        return done;
+    }
+
+    //hacky game menu
+    //TODO: refactor
+    function renderMenu(start, duration, bgcolor, opacity, initialOffsetY, finalOffsetY) {
+        var text = 'Lady Bumps!';
+        var font = 'Lobster'
+        var fontsize = 100;
+
+        var elapsed  = Date.now() - start;
+        var done = elapsed > duration*1000;
+        var offsety = done?finalOffsetY: initialOffsetY + elapsed/1000/duration*(finalOffsetY - initialOffsetY);
+
+        var button_width = canvas.width/3;
+        var dims = queryTextDims(text, fontsize+"px "+font)
+
+        renderSquare(0,0, canvas.width, canvas.height, bgcolor, null, 0, opacity);
+
+        ctx.save();
+        ctx.translate((canvas.width - dims.width)/2, offsety);
+        renderText(0, -fontsize, text, 3, font, fontsize, 'red', 'white');
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(0 ,- offsety);
+        menuButton.render();
+        ctx.restore();
+
+        return done;
+    }
+
+    /*
+     * Helper functions to draw basic shapes
+     */
+    function renderSquare(x, y, w, h, color, strokecolor, linewidth, opacity) {
+        ctx.save();
+        ctx.globalAlpha = opacity
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        if(color)
+        {
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+        if(strokecolor)
+        {
+            ctx.strokeStyle = strokecolor;
+            ctx.lineWidth = linewidth;
+            ctx.stroke()
+        }
+        ctx.closePath();
+        ctx.restore();
+    }
+
+    function renderArc(centerx, centery, radius, fill, stroke, linewidth, opacity, startangle, endangle)
+    {
+        var is_arc = Math.abs(endangle - startangle) < 2*Math.PI;
+        ctx.save();
+        ctx.beginPath();
+
+        if (is_arc)
+            ctx.lineTo(centerx,centery);
+
+        ctx.arc(centerx, centery,radius, startangle, endangle);
+
+        if (is_arc)
+            ctx.lineTo(centerx, centery);
+
+        if(fill) {
+            ctx.fillStyle = fill;
+            ctx.fill();
+        }
+
+        if(stroke)
+        {
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = linewidth;
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    function queryTextDims(text, font)
+    {
+        ctx.save();
+        ctx.font = font;
+        var w = ctx.measureText(text).width;
+        var h = 0;
+        ctx.restore();
+        return {width: w, height:h};
+    }
+
+    function renderText(x, y, text, lineWidth, font, size, fill, stroke) {
+        ctx.save();
+        ctx.fillStyle =  fill;
+        ctx.strokeStyle =  stroke;
+        ctx.lineWidth = lineWidth;
+        ctx.font = size+"px "+font;
+        ctx.fillText(text, x, y);
+        ctx.strokeText(text, x, y);
+        ctx.restore();
+    }
+
     /* This function d a good place to
      * handle game reset states - maybe a new game menu or a game over screen
      * those sorts of things. It's only called once by the init() method.
      */
     function reset() {
-        var level1 =
-               "BBBBBBBBBBBBBBBGGGGG\
-                GGGBBBGGGBBBBBBGGGGG\
-                GCGGGBGGCCBBBCCCCCC.\
-                GCCCGGGCCCCCBCCCCCC.\
-                .CCCCGGCCCCCCCCCCCC.\
-                GCCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
-                GCCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
-                GCCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
-                GCCCGCCGGGGGGCCGCCC.\
-                .CCCGCCGGCCGGCCGCCC.\
-                GCCCGGGCCGGCCGGGCCC.\
-                .CCCGGGCCGGCCGGGCCC.\
-                GCCCGGGGGCCGGGGGCCC.\
-                .CCCGGGGGCCGGGGGCCC.\
-                GCCCGGGGGGGGGGGGCCC.\
-                .CCCGGGGGGGGGGGGCCC.\
-                GCCCGGGGGGCGGGGGCCC.\
-                .CCCGGGGGCCCGGGGCCC.\
-                GCCCGGGGGGCGGGGGCCC.\
-                .CCCGGCCCCCCCCCGCCC.\
-                GCCCGGGGCCCCCGGGCCC.\
-                .CCCGGGGGCCCGGGGCCC.\
-                GCCCGGGGGCCCGGGGCCC.\
-                .CCCGGGGGCGCGGGGCCC.\
-                GCCCGGGGGCGCGGGGCCC.\
-                .CCCGGGGGCGCGGGGCCC.\
-                GCCCGGGGGGGGGGGGCCC.\
-                .CCCCCCCCCCCCCCCCCC.\
-                GCCCCCCCCCCCCCCCCCC.\
-                .CCCCCCCCCCCCCCCCCC.\
-                G...................";
-
-        var level2 =
-               "...............11111\
-                111...111......F...1\
-                M..11.1..F...FF....M\
-                1....1....FF.F.....M\
-                M...........F....F.M\
-                1...M..........FF..M\
-                M..............FF..M\
-                1........C.....FF..M\
-                M........C.........M\
-                1........CCCC......M\
-                M......CCCC........M\
-                1.........C.....F..M\
-                M.........C....F...M\
-                1....I.............M\
-                M..................M\
-                1.......F.....F....M\
-                M..........2.......M\
-                1..................M\
-                M....F......F......M\
-                1...............2..M\
-                M.........F........M\
-                1..................M\
-                M......1.......F...M\
-                1..................M\
-                M..................M\
-                1...I..............M\
-                M..............F...M\
-                1..................M\
-                M..................M\
-                1.....F......F.....M\
-                M..................M\
-                1.........I........M\
-                M..................M\
-                MMMMMMMMMMMMMMMMMMMM";
-
-        var level3 =
-               "....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                .........C..........\
-                .........CCC........\
-                ........CCC.........\
-                ..........C.........\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                .......I....I.......\
-                ....................\
-                ....................\
-                ....................\
-                ....................";
-
-        var level4 =
-               "....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                .........CC.........\
-                .........CC.........\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ........F..F........\
-                ....................\
-                ....................\
-                ....................\
-                ....................";
-
-    var level5 =
-               "....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ..........I.........\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                ....................\
-                .........II.........\
-                ....................\
-                ....................\
-                ....................\
-                ....................";
-
-//remove empty spaces from string.
-        level1 = level1.replace(/\s+/g,"");
-        level2 = level2.replace(/\s+/g,"");
-        level3 = level3.replace(/\s+/g,"");
-        level4 = level4.replace(/\s+/g,"");
-        level5 = level5.replace(/\s+/g,"");
-
+        //levels defined in maps.js
         map =
             [
                 level1,
@@ -616,12 +834,14 @@ var Engine = (function(global) {
                       '1': 'images/tree-short.png',
                       '2': 'images/tree-tall.png',
                       '3': 'images/tree-ugly.png',
+                      '4': 'images/Rock.png',
                     };
 
         item_tiles = {
-                        '1': 'images/tree-short.png',
-                        '2': 'images/tree-tall.png',
-                        '3': 'images/tree-ugly.png'
+                        'a': 'images/Gem Orange.png',
+                        'b': 'images/Gem Green.png',
+                        'c': 'images/Gem Blue.png',
+                        'd': 'images/Key.png'
                      };
 
         shadow_tiles = [
@@ -640,17 +860,26 @@ var Engine = (function(global) {
         numCols = 20;
         numRows = map[0].length/numCols;
 
-        global.numCols = numCols;
-        global.numRows = numRows;
-        global.map = map;
-
 
         createShadowMap();
+        createItemMap();
+
+        genericTimeStamp = Date.now();
+        global.map = map;
+        global.numCols = numCols;
+        global.numRows = numRows;
+        global.gameState = gameState;
+
+        initAppStuff();
+        updateViewPort();
     }
 
     /* Go ahead and load all of the images we know we're going to need to
      * draw our game level. Then set init as the callback method, so that when
      * all of these images are properly loaded our game will start.
+     *
+     * All tiles are part of "Planet Cute" collection by Daniel Cook (Lostgarden.com)
+     * http://www.lostgarden.com/2007/05/cutegod-prototyping-challenge.html
      */
     Resources.load([
         'images/stone-block.png',
@@ -681,7 +910,16 @@ var Engine = (function(global) {
         'images/shadow-side-south.png',
         'images/shadow-west.png',
         'images/wall-block.png',
-        'images/wall-block-tall.png'
+        'images/wall-block-tall.png',
+        'images/Rock.png',
+        'images/char-princess-girl.png',
+        'images/char-princess-girl-damage.png',
+        'images/char-boy-damage.png',
+        'images/Heart.png',
+        'images/Gem Orange.png',
+        'images/Gem Green.png',
+        'images/Gem Blue.png',
+        'images/Key.png'
     ]);
     Resources.onReady(init);
 
@@ -689,5 +927,8 @@ var Engine = (function(global) {
      * object when run in a browser) so that developer's can use it more easily
      * from within their app.js files.
      */
-    global.ctx = ctx;
+        global.ctx = ctx;
+        global.mapTileWidth = mapTileWidth;
+        global.mapTileHeight = mapTileHeight;
+
 })(this);

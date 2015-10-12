@@ -1,3 +1,30 @@
+// Now instantiate your objects.
+// Place all enemy objects in an array called allEnemies
+// Place the player object in a variable called player
+var allEntities;
+var minEnemies = 15;
+var maxEnemies = 30;
+var numEnemies;
+var player;
+var debug = false;
+//used to handle required render order
+var entityList;
+//number of gems to pickup
+var numItems = 10;
+//game duration in s
+var timer = 60;
+
+//wasn't able to declare this in engine.js, but it should go there.
+var item_map;
+
+/*
+ * returns an alpha value between min_transparency and 1
+ *
+ */
+function blinkEffect(min_transparency, frequency) {
+    return (Math.sin(Date.now()*frequency/1000*2*Math.PI)+1)/2*(min_transparency - 1) + 1 ;
+}
+
 var Entity = function(sprite, x, y, vx, vy, id) {
     this.sprite = sprite;
     this.x = x;
@@ -20,6 +47,10 @@ var Entity = function(sprite, x, y, vx, vy, id) {
     this.tileRight = 0;
     this.id = id;
 };
+
+Entity.prototype.getSprite = function() {
+    return this.sprite;
+}
 
 //calculate the angle that the sprite should be rotated in order to create
 //crawling/walking animation
@@ -44,6 +75,14 @@ Entity.prototype.hitTop = function() {
 
 Entity.prototype.hitBottom = function() {
     return this.y + this.hitRect.y + this.hitRect.h;
+}
+
+Entity.prototype.hitCenterx = function() {
+    return this.x + this.hitRect.cx;
+}
+
+Entity.prototype.hitCentery = function() {
+    return this.y + this.hitRect.cy;
 }
 
 //align sprite according to movement direction
@@ -84,16 +123,20 @@ Entity.prototype.render = function() {
         ctx.font = "20px serif";
         ctx.fillText("("+Math.floor(this.x)+", "+Math.floor(this.y)+")", 5, 20);
     }
-    //this.sh*2/3
     ctx.translate(this.hitRect.cx, this.hitRect.cy);
     ctx.rotate(this.angle() + this.alignAngle());
     this.customRenderOperation(ctx);
     ctx.translate(-this.hitRect.cx, -this.hitRect.cy);
-    ctx.drawImage(Resources.get(this.sprite), 0, 0);
+    ctx.drawImage(Resources.get(this.getSprite()), 0, 0);
     ctx.restore();
 };
 
 Entity.prototype.customRenderOperation = function() {
+    //noop
+};
+
+
+Entity.prototype.customUpdateLogic = function() {
     //noop
 };
 
@@ -108,6 +151,8 @@ Entity.prototype.update = function(dt) {
     oldLeft = Math.floor(this.hitLeft()/mapTileWidth);
     oldRight = Math.floor(this.hitRight()/mapTileWidth);
 
+    this.customUpdateLogic(dt);
+
     if(Math.abs(this.vx) > epsilon)
     {
         var xstart = this.vx < 0? this.hitLeft(): this.hitRight();
@@ -120,7 +165,7 @@ Entity.prototype.update = function(dt) {
         var hit1 = false;
         var hit2 = false;
 
-        //if player hasn't moved to a new tile or is in the top level skip collision check.
+        //if entity hasn't moved to a new tile or is in the top level skip collision check.
         if (tileXStart != tileXEnd && map.length - 1 > this.level) {
             hit1 = map[this.level + 1][numCols*oldTop + tileXEnd]!= '.';
             hit2 = map[this.level + 1][numCols*oldBottom + tileXEnd]!= '.';
@@ -155,8 +200,9 @@ Entity.prototype.update = function(dt) {
 
         var hit1 = false;
         var hit2 = false;
+        var hitPlayer = false;
 
-        //if player hasn't moved to a new tile or is in the top level skip collision check.
+        //if entity hasn't moved to a new tile or is in the top level skip collision check.
         if (tileYStart != tileYEnd && map.length-1 > this.level) {
             hit1 = map[this.level + 1][numCols*tileYEnd + oldLeft]!= '.';
             hit2 = map[this.level + 1][numCols*tileYEnd + oldRight]!= '.';
@@ -186,6 +232,14 @@ Entity.prototype.update = function(dt) {
     return entityMoved;
 };
 
+
+Entity.prototype.checkCollision = function(entity) {
+    return !(entity.hitCenterx() < this.hitLeft() ||
+            entity.hitCenterx() > this.hitRight() ||
+            entity.hitCentery() < this.hitTop()||
+            entity.hitCentery() > this.hitBottom());
+};
+
 /*
  * Updates the entityList data structure which is needed to render the game
  * elements (e.g. tiles, objects, entities) in the proper order.
@@ -195,6 +249,7 @@ Entity.prototype.updateEntityList = function(oldRow) {
     var level = this.level +1;
     var row = this.tileBottom;
     var id = this.id;
+    var isPlayer = id==256;
 
     //remove old entry if it exists
     if(level in entityList && oldRow in entityList[level]) {
@@ -211,11 +266,13 @@ Entity.prototype.updateEntityList = function(oldRow) {
         }
     }
 
-
     //add current entry
     if(level in entityList) {
         if(row in entityList[level]) {
-            entityList[level][row].push(id);
+            if(isPlayer)
+                entityList[level][row].push(id);
+            else
+                entityList[level][row].unshift(id);
         }
         else {
             entityList[level][row] = [id];
@@ -258,26 +315,26 @@ Enemy.prototype = Object.create(Entity.prototype);
 Enemy.prototype.constructor = Enemy;
 
 Enemy.prototype.customRenderOperation = function(ctx) {
-    if(this.state == this.behaviourType.CHASING)
-    {
-        //do the blink effect
-        f = 3;
-        p = 50;
-        t = (Math.sin(Date.now()/p)+1)/2/f + 1 - 1/f;
-        ctx.globalAlpha = t;
-    }
-
+    //flip the sprite vertically so that feet keep facing down after rotation
     if(this.vx < 0) {
         ctx.scale(1,-1);
     }
 };
 
-// Now write your own player class
-// This class requires an update(), render() and
-// a handleInput() method.
+Enemy.prototype.customUpdateLogic = function(dt) {
+    if(this.checkCollision(player)) {
+        var transfer = 10;
+        var newvx = this.vx*(1 - transfer);
+        var newvy = this.vy*(1 - transfer);
+
+        player.vx += this.vx*dt*transfer;
+        player.vy += this.vy*dt*transfer;
+        player.doDamage();
+    }
+};
 
 var Player = function(x, y) {
-    Entity.call(this, "images/char-boy.png", x, y, 0, 0, 256);
+    Entity.call(this, 'images/char-princess-girl.png', x, y, 0, 0, 256);
     this.vmag = 100;
     this.attenuation = 0.98;
     //lose momentum after bounce
@@ -292,27 +349,87 @@ var Player = function(x, y) {
     this.y-=this.hitRect.cy;
     this.update(0);
     this.updateEntityList(-1);
+    this.damageSprite = 'images/char-princess-girl-damage.png';
+    this.stateType = {
+        DAMAGE: 0,
+        DEFAULT: 1
+    };
+    this.state = this.stateType.DEFAULT;
+    this.life = 100;
+    this.gemcount = 0;
 };
 
 Player.prototype = Object.create(Entity.prototype);
 Player.prototype.constructor = Player;
 
+Player.prototype.doDamage = function() {
+    if(this.state != this.stateType.DAMAGE) {
+        this.state = this.stateType.DAMAGE;
+        var shittyClosures = this;
+        //stop the damage animation in 1 sec
+        setTimeout(function(){ shittyClosures.state = shittyClosures.stateType.DEFAULT; }, 1000);
+        this.life = Math.max(0, this.life- 10);
+    }
+};
+
+Player.prototype.customUpdateLogic = function(dt) {
+    this.checkItems();
+};
+
+Player.prototype.checkItems = function() {
+    var level = this.level + 1;
+    if ((level in item_map) && (this.tileTop in item_map[level]) &&
+       ((this.tileRight in item_map[level][this.tileTop]) || (this.tileLeft in item_map[level][this.tileTop]))) {
+
+        var gx, gy = (this.tileTop + 0.5)*mapTileHeight;
+
+        if (this.tileRight in item_map[level][this.tileTop]) {
+            col = this.tileRight;
+        }
+        else {
+            col = this.tileLeft;
+        }
+
+        gx = (col + 0.5)*mapTileWidth;
+        var gotit =  !(gx < this.hitLeft() ||
+        gx > this.hitRight() ||
+        gy < this.hitTop()||
+        gy > this.hitBottom());
+
+        if(gotit) {
+            delete item_map[level][this.tileTop][col];
+            this.gemcount++;
+        }
+    }
+};
+
 Player.prototype.handleInput = function(direction) {
-    switch(direction) {
-        case "left":
-            this.vx -= this.vmag;
-        break;
-        case "up":
-            this.vy -= this.vmag;
-        break;
-        case "right":
-            this.vx += this.vmag;
-        break;
-        case "down":
-            this.vy += this.vmag;
-        break;
-        default:
-        break;
+    if (gameState.current == gameState.type.IN_GAME) {
+        switch(direction) {
+            case "left":
+                this.vx -= this.vmag;
+            break;
+            case "up":
+                this.vy -= this.vmag;
+            break;
+            case "right":
+                this.vx += this.vmag;
+            break;
+            case "down":
+                this.vy += this.vmag;
+            break;
+            default:
+            break;
+        }
+    }
+};
+
+Player.prototype.getSprite = function() {
+    if (this.state == this.stateType.DAMAGE) {
+        return this.damageSprite;
+    }
+    else {
+        return this.sprite;
     }
 };
 
@@ -320,39 +437,15 @@ Player.prototype.alignAngle = function() {
     return 0;
 }
 
-// Now instantiate your objects.
-// Place all enemy objects in an array called allEnemies
-// Place the player object in a variable called player
-var allEntities = new Object();
-var numEnemies = 10;
-var player;
-var debug = true;
-//used to handle required render order
-var entityList = new Object();
+Player.prototype.customRenderOperation = function(ctx) {
+    if(this.state == this.stateType.DAMAGE)
+    {
 
-var initAppStuff = function()
-{
-
-    var centerx = ctx.canvas.width/2;
-    var centery = ctx.canvas.height/2;
-    player = new Player(centerx, centery);
-
-    for (i = 0; i < numEnemies; i++) {
-        var basev = 100;
-
-        allEntities[i] = new Enemy(
-                            150 + 30*i,
-                            200 + i*120,
-                            (i%2*-2+1)*(basev + 10*i),
-                            (i%2*2-1)*(basev + 10*i),
-                            i);
+        ctx.globalAlpha = blinkEffect(0.6, 4);
     }
+};
 
-    allEntities[256] = player;
-
-    // This listens for key presses and sends the keys to your
-    // Player.handleInput() method. You don't need to modify this.
-    document.addEventListener('keyup', function(e) {
+var keyHandler = function(e) {
         var allowedKeys = {
             37: 'left',
             38: 'up',
@@ -361,7 +454,61 @@ var initAppStuff = function()
         };
 
         player.handleInput(allowedKeys[e.keyCode]);
-    });
-}
+};
 
-Resources.onReady(initAppStuff);
+var initAppStuff = function()
+{
+    allEntities = new Object();
+    entityList = new Object();
+    deployPlayer();
+    deployEnemies();
+
+    // This listens for key presses and sends the keys to your
+    // Player.handleInput() method. You don't need to modify this.
+    document.removeEventListener('keyup', keyHandler);
+    document.addEventListener('keyup', keyHandler);
+};
+
+
+var deployEnemies = function() {
+
+    numEnemies = minEnemies + Math.floor((maxEnemies - minEnemies)*Math.random());
+
+    //for now it's limited to the 1st level
+    for(level=1; level < 2; level ++) {
+        var spaces = map[level].split('.').length - 1,
+        index, random,row, col, basev, angle;
+
+        for (i = 0; i< numEnemies; i++)
+        {
+            random = Math.floor(Math.random()*spaces);
+            index = map[level].split('.', random).join('.').length;
+            row = Math.floor(index/numCols);
+            col = index% numCols;
+            basev = 150 + 100*Math.random();
+            angle = Math.random()*Math.PI*2;
+            //console.log("#enemy", i, row, col, basev, angle*180/Math.PI);
+            allEntities[i] = new Enemy(
+                            col*mapTileWidth,
+                            row*mapTileHeight,
+                            Math.cos(angle)*basev,
+                            Math.sin(angle)*basev,
+                            i);
+        }
+    }
+};
+
+//put player in some random empty space in level 1;
+var deployPlayer = function() {
+    var level = 1;
+    var spaces = map[level].split('.').length - 1;
+    var random = Math.floor(Math.random()*spaces);
+    var index = map[level].split('.', random).join('.').length;
+    var row = Math.floor(index/numCols);
+    var col = index% numCols;
+    var centerx = col*mapTileWidth;
+    var centery = row*mapTileHeight;
+    player = new Player(centerx, centery);
+    allEntities[256] = player;
+
+}
