@@ -4,7 +4,18 @@ A javascript based 2D Isometric-like tile game inspired by Udacity's frontend-na
 
 http://www.lostgarden.com/2007/05/cutegod-prototyping-challenge.html
 
-The objective of the game is to collect all 10 gems before the time runs out or you die.
+The objective of the game is to collect all 10 gems before the time runs out or you die. You need to avoid the swarms of bumping lady bugs.
+
+<table>
+<tr>
+<td>
+<img src="http://res.cloudinary.com/nomorepics/image/upload/c_scale,h_350/v1444788169/bumps1_m3wnym.png">
+</td>
+<td>
+<img src="http://res.cloudinary.com/nomorepics/image/upload/c_scale,h_350/v1444788168/bumps2_tiqjc3.png">
+</td>
+</tr>
+</table>
 
 <h2>TODO</h2>
 <ul>
