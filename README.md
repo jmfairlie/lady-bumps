@@ -1,8 +1,6 @@
 <h1>Lady Bumps!</h1>
 
-A javascript based 2D Isometric-like tile game inspired by Udacity's frontend-nanodegree arcade game exercise and by Daniel Cook's free game art and related article.
-
-http://www.lostgarden.com/2007/05/cutegod-prototyping-challenge.html
+A javascript based 2D Isometric-like tile game inspired by Udacity's frontend-nanodegree arcade game exercise and by Daniel Cook's free game art and related <a target="_blank" href="http://www.lostgarden.com/2007/05/cutegod-prototyping-challenge.html">article</a>.
 
 The objective of the game is to collect all 10 gems before the time runs out or you die. You need to avoid the swarms of bumping lady bugs.
 
