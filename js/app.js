@@ -50,7 +50,7 @@ var Entity = function(sprite, x, y, vx, vy, id) {
 
 Entity.prototype.getSprite = function() {
     return this.sprite;
-}
+};
 
 //calculate the angle that the sprite should be rotated in order to create
 //crawling/walking animation
@@ -59,49 +59,49 @@ Entity.prototype.angle = function() {
     var f = 60;
     var angle = (Math.abs(this.accumx) + Math.abs(this.accumy)) % a/a*Math.PI*2;
     return Math.sin(angle)/f*Math.PI*2;
-}
+};
 
 Entity.prototype.hitLeft = function() {
     return this.x + this.hitRect.x;
-}
+};
 
 Entity.prototype.hitRight = function() {
     return this.x + this.hitRect.x + this.hitRect.w;
-}
+};
 
 Entity.prototype.hitTop = function() {
     return this.y + this.hitRect.y;
-}
+};
 
 Entity.prototype.hitBottom = function() {
     return this.y + this.hitRect.y + this.hitRect.h;
-}
+};
 
 Entity.prototype.hitCenterx = function() {
     return this.x + this.hitRect.cx;
-}
+};
 
 Entity.prototype.hitCentery = function() {
     return this.y + this.hitRect.cy;
-}
+};
 
 //align sprite according to movement direction
 Entity.prototype.alignAngle =  function() {
-    if(this.vx != 0) {
-        if(this.vy != 0) {
+    if(this.vx !== 0) {
+        if(this.vy !== 0) {
             return Math.atan(this.vy/this.vx) + Math.PI*(this.vx<0);
         }
         else {
             return Math.PI*(this.vx<0);
         }
     }
-    else if (this.vy !=0) {
+    else if (this.vy !==0) {
         return this.vy/Math.abs(this.vy)*Math.PI/2;
     }
     else {
         return 0;
     }
-}
+};
 
 Entity.prototype.render = function() {
     ctx.save();
@@ -144,12 +144,12 @@ Entity.prototype.customUpdateLogic = function() {
 // Parameter: dt, a time delta between ticks
 Entity.prototype.update = function(dt) {
     var epsilon = 5;
-    var entityMoved = false;
+    var entityMoved = false, hit1, hit2;
 
-    oldTop = Math.floor(this.hitTop()/mapTileHeight);
-    oldBottom = Math.floor(this.hitBottom()/mapTileHeight);
-    oldLeft = Math.floor(this.hitLeft()/mapTileWidth);
-    oldRight = Math.floor(this.hitRight()/mapTileWidth);
+    var oldTop = Math.floor(this.hitTop()/mapTileHeight);
+    var oldBottom = Math.floor(this.hitBottom()/mapTileHeight);
+    var oldLeft = Math.floor(this.hitLeft()/mapTileWidth);
+    var oldRight = Math.floor(this.hitRight()/mapTileWidth);
 
     this.customUpdateLogic(dt);
 
@@ -161,9 +161,8 @@ Entity.prototype.update = function(dt) {
         var tileXStart = Math.floor(xstart/mapTileWidth);
         var tileXEnd = Math.floor(xend/mapTileWidth);
 
-
-        var hit1 = false;
-        var hit2 = false;
+        hit1 = false;
+        hit2 = false;
 
         //if entity hasn't moved to a new tile or is in the top level skip collision check.
         if (tileXStart != tileXEnd && map.length - 1 > this.level) {
@@ -198,9 +197,8 @@ Entity.prototype.update = function(dt) {
         var tileYStart = Math.floor(ystart/mapTileHeight);
         var tileYEnd = Math.floor(yend/mapTileHeight);
 
-        var hit1 = false;
-        var hit2 = false;
-        var hitPlayer = false;
+        hit1 = false;
+        hit2 = false;
 
         //if entity hasn't moved to a new tile or is in the top level skip collision check.
         if (tileYStart != tileYEnd && map.length-1 > this.level) {
@@ -258,9 +256,9 @@ Entity.prototype.updateEntityList = function(oldRow) {
             entityList[level][oldRow].splice(index, 1);
         }
 
-        if(entityList[level][oldRow].length == 0) {
+        if(entityList[level][oldRow].length === 0) {
             delete entityList[level][oldRow];
-            if(Object.keys(entityList[level]).length == 0) {
+            if(Object.keys(entityList[level]).length === 0) {
                 delete entityList[level];
             }
         }
@@ -279,8 +277,8 @@ Entity.prototype.updateEntityList = function(oldRow) {
         }
     }
     else {
-        entityList[level] = new Object();
-        entityList[level][row] = new Array();
+        entityList[level] = {};
+        entityList[level][row] = [];
         entityList[level][row] = [id];
     }
 
@@ -324,8 +322,6 @@ Enemy.prototype.customRenderOperation = function(ctx) {
 Enemy.prototype.customUpdateLogic = function(dt) {
     if(this.checkCollision(player)) {
         var transfer = 10;
-        var newvx = this.vx*(1 - transfer);
-        var newvy = this.vy*(1 - transfer);
 
         player.vx += this.vx*dt*transfer;
         player.vy += this.vy*dt*transfer;
@@ -377,7 +373,7 @@ Player.prototype.customUpdateLogic = function(dt) {
 };
 
 Player.prototype.checkItems = function() {
-    var level = this.level + 1;
+    var level = this.level + 1, col;
     if ((level in item_map) && (this.tileTop in item_map[level]) &&
        ((this.tileRight in item_map[level][this.tileTop]) || (this.tileLeft in item_map[level][this.tileTop]))) {
 
@@ -435,7 +431,7 @@ Player.prototype.getSprite = function() {
 
 Player.prototype.alignAngle = function() {
     return 0;
-}
+};
 
 Player.prototype.customRenderOperation = function(ctx) {
     if(this.state == this.stateType.DAMAGE)
@@ -458,8 +454,8 @@ var keyHandler = function(e) {
 
 var initAppStuff = function()
 {
-    allEntities = new Object();
-    entityList = new Object();
+    allEntities = {};
+    entityList = {};
     deployPlayer();
     deployEnemies();
 
@@ -471,7 +467,7 @@ var initAppStuff = function()
 
 
 var deployEnemies = function() {
-
+    var level, i;
     numEnemies = minEnemies + Math.floor((maxEnemies - minEnemies)*Math.random());
 
     //for now it's limited to the 1st level
@@ -489,8 +485,8 @@ var deployEnemies = function() {
             angle = Math.random()*Math.PI*2;
             //console.log("#enemy", i, row, col, basev, angle*180/Math.PI);
             allEntities[i] = new Enemy(
-                            col*mapTileWidth,
-                            row*mapTileHeight,
+                            (col + 0.5)*mapTileWidth,
+                            (row + 0.5)*mapTileHeight,
                             Math.cos(angle)*basev,
                             Math.sin(angle)*basev,
                             i);
@@ -506,9 +502,8 @@ var deployPlayer = function() {
     var index = map[level].split('.', random).join('.').length;
     var row = Math.floor(index/numCols);
     var col = index% numCols;
-    var centerx = col*mapTileWidth;
-    var centery = row*mapTileHeight;
+    var centerx = (col + 0.5)*mapTileWidth;
+    var centery = (row + 0.5)*mapTileHeight;
     player = new Player(centerx, centery);
     allEntities[256] = player;
-
-}
+};

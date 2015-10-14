@@ -49,7 +49,7 @@ var Engine = (function(global) {
                         GAME_MENU_FADEIN: 4,
                         GAME_MENU_FADEOUT: 5
                     }
-                }
+                };
 
     var genericTimeStamp;
     var menuButton;
@@ -65,6 +65,7 @@ var Engine = (function(global) {
         this.color = color;
         this.hovercolor = hovercolor;
         this.strokecolor = strokecolor;
+        this.textstrokewidth = textstrokewidth;
         this.linewidth = linewidth;
         this.text = text;
         this.textcolor = textcolor;
@@ -76,7 +77,7 @@ var Engine = (function(global) {
     };
 
     Button.prototype.render = function() {
-        var radius = this.height/2;
+        var radius = this.height/2, text_dims;
         var currcolor = (this.hover)?this.hovercolor:this.color;
 
         renderArc(this.x + radius, this.y + this.height/2, radius, currcolor,
@@ -123,10 +124,10 @@ var Engine = (function(global) {
                     x: e.clientX - rect.left,
                     y: e.clientY - rect.top + canvas.height/2
                 };
-    };
+    }
 
     //helper function
-    function rgbcolor(r, g, b){
+    function rgbcolor(r, g, b) {
       return "rgb("+Math.min(r, 255)+","+Math.min(g, 255)+","+Math.min(b, 255)+")";
     }
 
@@ -136,6 +137,10 @@ var Engine = (function(global) {
     function main() {
 
         var now = Date.now(),
+        duration,
+        color,
+        start_opacity,
+        end_opacity,
         dt = (now - lastTime) / 1000.0;
         //TODO: this state machine logic is quite convoluted and impractical. Needs refactoring.
         switch (gameState.current) {
@@ -145,7 +150,7 @@ var Engine = (function(global) {
                 render();
                 renderUI();
 
-                if (player.life == 0 ||
+                if (player.life === 0 ||
                     player.gemcount == numItems ||
                     (now - gameStartTime)/1000 >= timer)
                 {
@@ -155,7 +160,10 @@ var Engine = (function(global) {
 
             break;
             case gameState.type.GAME_FINISHED:
-                var duration = 3, start_opacity = 0, end_opacity = 0.9, color = 'black';
+                start_opacity = 0;
+                end_opacity = 0.9;
+                duration = 3;
+                color = 'black';
 
                 render();
                 update(dt);
@@ -167,17 +175,21 @@ var Engine = (function(global) {
             break;
 
             case gameState.type.GAME_MENU:
-                var bgcolor= 'black', duration = 0.5, opacity = 0.9;
+                color= 'black';
+                start_opacity = 0.9;
+                duration = 0.5;
                 render();
                 update(dt);
-                renderMenu(genericTimeStamp, duration, bgcolor, opacity, 0, canvas.height/2 );
+                renderMenu(genericTimeStamp, duration, color, start_opacity, 0, canvas.height/2 );
             break;
 
             case gameState.type.GAME_MENU_HIDE:
-                var bgcolor= 'black', duration = 0.5, opacity = 0.9;
+                color= 'black';
+                start_opacity = 0.9;
+                duration = 0.5;
                 render();
                 update(dt);
-                if(renderMenu(genericTimeStamp, duration, bgcolor, opacity, canvas.height/2, 0)) {
+                if(renderMenu(genericTimeStamp, duration, color, start_opacity, canvas.height/2, 0)) {
                         gameState.current = gameState.type.GAME_MENU_FADEIN;
                         genericTimeStamp = now;
                 }
@@ -185,7 +197,10 @@ var Engine = (function(global) {
             break;
 
             case gameState.type.GAME_MENU_FADEIN:
-                var duration = 1, start_opacity = 0.9, end_opacity = 1, color = 'black';
+                start_opacity = 0.9;
+                end_opacity = 1;
+                color = 'black';
+                duration = 1;
 
                 render();
                 update(dt);
@@ -198,8 +213,10 @@ var Engine = (function(global) {
             break;
 
             case gameState.type.GAME_MENU_FADEOUT:
-                var duration = 3, start_opacity = 1, end_opacity =0 , color = 'black';
-
+                start_opacity = 1;
+                end_opacity =0;
+                color = 'black';
+                duration = 3;
                 render();
 
                 if (renderFade(genericTimeStamp, duration, start_opacity, end_opacity, color)) {
@@ -279,11 +296,11 @@ var Engine = (function(global) {
  * http://lunar.lostgarden.com/uploaded_images/PlanetCuteShadowTest-734680.jpg
  */
     function createShadowMap() {
-        shadow_map = new Array();
-        var c, r, top, shadows,t1,t2, special, valid, any, temp, se;
+        shadow_map = [];
+        var c, r, top, shadows,t1,t2, special, valid, any, temp, se, level, row, col, tile, s, ds, ss, i, j;
 
         for(level=0; level< map.length; level++) {
-            shadow_map.push(new Array());
+            shadow_map.push([]);
             for(row=0; row < numRows; row++) {
                 for(col=0; col< numCols; col++) {
                     shadows = null;
@@ -292,14 +309,14 @@ var Engine = (function(global) {
 
                     if(tile)
                     {
-                        temp = []
+                        temp = [];
                         any = false;
                         s = (row + 1) < numRows &&
                              map[level][(row+1)*numCols + col]!='.';
 
 
                         se = !s && (row + 1) < numRows && (col - 1)>= 0 &&
-                             map[level][(row+1)*numCols + col - 1]!='.'
+                             map[level][(row+1)*numCols + col - 1]!='.';
 
                         ds = (row + 1) < numRows && (level - 1) >= 0 && level == 1 &&
                              map[level-1][(row+1)*numCols + col] !='.';
@@ -312,10 +329,10 @@ var Engine = (function(global) {
                         if(!top && level < map.length - 1) {
                             for(i=-1; i< 2; i++) {
                                 for(j=-1; j< 2; j++) {
-                                    var center = j==0 && i== 0;
+                                    var center = j===0 && i=== 0;
                                     if(!center)
                                     {
-                                        var intercardinal = j!=0 && i!= 0;
+                                        var intercardinal = j!==0 && i!== 0;
                                         special = true;
                                         c = col + i;
                                         r = row + j;
@@ -357,13 +374,14 @@ var Engine = (function(global) {
      *
      */
     function createItemMap() {
-        item_map = new Object();
+        var level, i;
+        item_map = {};
         //for now it's limited to the 1st level
         for(level=1; level < 2; level ++) {
             var spaces = map[level].split('.').length - 1,
             index, random,row, col, gems, ind;
 
-            item_map[level] = new Object();
+            item_map[level] = {};
 
             for (i = 0; i< numItems; i++)
             {
@@ -372,11 +390,11 @@ var Engine = (function(global) {
                 row = Math.floor(index/numCols);
                 col = index% numCols;
                 if(!(row in item_map[level])) {
-                    item_map[level][row] = new Object();
-                    item_map[level][row][col] = new Object();
+                    item_map[level][row] = {};
+                    item_map[level][row][col] = {};
                 }
                 else if (!(col in item_map[level][row])) {
-                    item_map[level][row][col] = new Object();
+                    item_map[level][row][col] = {};
                 }
                 gems = ['a', 'b', 'c'];
                 ind = Math.floor(Math.random()*3);
@@ -491,7 +509,7 @@ var Engine = (function(global) {
     function renderEntities(entityArr) {
         ctx.save();
         ctx.translate(0, levelOffset);
-        var entity;
+        var entity, i;
         for(i = 0; i < entityArr.length; i++) {
             entity = allEntities[entityArr[i]];
             if(entity.tileTop < rowEnd &&
@@ -541,7 +559,7 @@ var Engine = (function(global) {
     function render() {
 
         var numLevels = map.length,
-            entityArr, inLevel, inRow;
+            entityArr, inLevel, inRow, level, row, col;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
@@ -580,7 +598,7 @@ var Engine = (function(global) {
 
     //renders the shadows of a specic tile
     function renderTileShadows(level, row, col) {
-        var shadows = shadow_map[level][row*numCols + col];
+        var shadows = shadow_map[level][row*numCols + col], i;
         if(shadows)
         {
             for(i=0; i < shadows.length; i++) {
@@ -650,7 +668,6 @@ var Engine = (function(global) {
     //TODO: refactor
     function renderGemBar() {
         var maxlength = canvas.width*0.4;
-        var barheight = 30;
         var bargap = 5;
         var barpad = 15;
 
@@ -672,13 +689,11 @@ var Engine = (function(global) {
     //TODO: refactor
     function renderTimer() {
         var maxlength = canvas.width*0.4;
-        var barheight = 30;
         var bargap = 5;
         var barpad = 15;
         var seconds = (Date.now() - gameStartTime)/1000;
 
         var left = timer - seconds;
-        var f = left/seconds;
         var opacity = (left < 15)?blinkEffect(0.5,3):1;
         var radius = 25;
 
@@ -703,15 +718,14 @@ var Engine = (function(global) {
     //TODO: refactor
     function renderMenu(start, duration, bgcolor, opacity, initialOffsetY, finalOffsetY) {
         var text = 'Lady Bumps!';
-        var font = 'Lobster'
+        var font = 'Lobster';
         var fontsize = 100;
 
         var elapsed  = Date.now() - start;
         var done = elapsed > duration*1000;
         var offsety = done?finalOffsetY: initialOffsetY + elapsed/1000/duration*(finalOffsetY - initialOffsetY);
 
-        var button_width = canvas.width/3;
-        var dims = queryTextDims(text, fontsize+"px "+font)
+        var dims = queryTextDims(text, fontsize+"px "+font);
 
         renderSquare(0,0, canvas.width, canvas.height, bgcolor, null, 0, opacity);
 
@@ -733,7 +747,7 @@ var Engine = (function(global) {
      */
     function renderSquare(x, y, w, h, color, strokecolor, linewidth, opacity) {
         ctx.save();
-        ctx.globalAlpha = opacity
+        ctx.globalAlpha = opacity;
         ctx.beginPath();
         ctx.rect(x, y, w, h);
         if(color)
@@ -745,16 +759,16 @@ var Engine = (function(global) {
         {
             ctx.strokeStyle = strokecolor;
             ctx.lineWidth = linewidth;
-            ctx.stroke()
+            ctx.stroke();
         }
         ctx.closePath();
         ctx.restore();
     }
 
-    function renderArc(centerx, centery, radius, fill, stroke, linewidth, opacity, startangle, endangle)
-    {
+    function renderArc(centerx, centery, radius, fill, stroke, linewidth, opacity, startangle, endangle) {
         var is_arc = Math.abs(endangle - startangle) < 2*Math.PI;
         ctx.save();
+        ctx.globalAlpha = opacity;
         ctx.beginPath();
 
         if (is_arc)
@@ -780,8 +794,7 @@ var Engine = (function(global) {
         ctx.restore();
     }
 
-    function queryTextDims(text, font)
-    {
+    function queryTextDims(text, font) {
         ctx.save();
         ctx.font = font;
         var w = ctx.measureText(text).width;
