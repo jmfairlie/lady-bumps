@@ -480,8 +480,7 @@ var Engine = (function(global) {
         colStart = Math.floor(Math.max(0, player.x - playerAbsolutePosX)/mapTileWidth),
         colEnd = Math.floor(Math.min((numCols -1)*mapTileWidth, player.x + canvas.width - playerAbsolutePosX)/mapTileWidth) + 1,
         rowStart = Math.floor(Math.max(0, player.y - playerAbsolutePosY)/mapTileHeight),
-        //one extra tile to take into account stacked tiles
-        rowEnd = Math.min(numRows, Math.floor(Math.min((numRows-1)*mapTileHeight, player.y + canvas.height - playerAbsolutePosY)/mapTileHeight) + 3);
+        rowEnd = Math.min(numRows, Math.floor(Math.min((numRows-1)*mapTileHeight, player.y + canvas.height - playerAbsolutePosY)/mapTileHeight) + 1);
     }
 
 // hilight the tiles the entity is stepping on
@@ -559,7 +558,7 @@ var Engine = (function(global) {
     function render() {
 
         var numLevels = map.length,
-            entityArr, inLevel, inRow, level, row, col;
+            entityArr, inLevel, inRow, level, row, col, actualRowStart, actualRowEnd;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
@@ -572,7 +571,10 @@ var Engine = (function(global) {
             ctx.save();
             ctx.translate(0, -levelOffset*level);
 
-            for (row = rowStart; row < rowEnd; row++) {
+            actualRowStart = Math.min(numRows, rowStart + Math.floor(level/3));
+            actualRowEnd = Math.min(numRows, rowEnd + Math.ceil(level/2));
+
+            for (row = actualRowStart; row < actualRowEnd; row++) {
 
                 for (col = colStart; col < colEnd; col++) {
                     ctx.save();
