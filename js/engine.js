@@ -9,9 +9,12 @@ var Engine = (function(global) {
         ctx = canvas.getContext('2d'),
         lastTime, gameStartTime;
 
-    canvas.width = 600;
-    canvas.height = 805;
-    doc.body.appendChild(canvas);
+    var container=doc.getElementById("container");
+
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight;
+
+    container.appendChild(canvas);
 
     var map;
     var shadow_map;
@@ -131,6 +134,15 @@ var Engine = (function(global) {
       return "rgb("+Math.min(r, 255)+","+Math.min(g, 255)+","+Math.min(b, 255)+")";
     }
 
+    function isGameOver(now) {
+        return player.life === 0 ||
+        (now - gameStartTime - player.timebonus)/1000 >= timer;
+    }
+
+    function didPlayerWin() {
+        return player.gemcount === numItems;
+    }
+
     /* This function serves as the kickoff point for the game loop itself
      * and handles properly calling the update and render methods.
      */
@@ -149,13 +161,20 @@ var Engine = (function(global) {
                 update(dt);
                 render();
                 renderUI();
+                var gameover = isGameOver(now);
+                var playerwon = didPlayerWin();
 
-                if (player.life === 0 ||
-                    player.gemcount == numItems ||
-                    (now - gameStartTime)/1000 >= timer)
+                if (gameover || playerwon)
                 {
+                    sfx.fadeOut("music");
                     gameState.current = gameState.type.GAME_FINISHED;
                     genericTimeStamp = now;
+
+                    if(gameover) {
+                        sfx.play("gameover");
+                    } else {
+                        sfx.play("win");
+                    }
                 }
 
             break;
@@ -256,6 +275,7 @@ var Engine = (function(global) {
             canvas.height + 100, button_width, button_width/4, '#333',
             'red', 'white', 3, "Play",'white', font, 'black', 1,
             function () {
+                sfx.fadeIn('music');
                 gameState.current = gameState.type.GAME_MENU_HIDE;
                 genericTimeStamp = Date.now();
                 canvas.removeEventListener('mousemove',menuButtonHover,false);
@@ -693,9 +713,9 @@ var Engine = (function(global) {
         var maxlength = canvas.width*0.4;
         var bargap = 5;
         var barpad = 15;
-        var seconds = (Date.now() - gameStartTime)/1000;
+        var seconds = (Date.now() - gameStartTime - player.timebonus)/1000;
 
-        var left = timer - seconds;
+        var left = Math.min(timer, timer - seconds);
         var opacity = (left < 15)?blinkEffect(0.5,3):1;
         var radius = 25;
 

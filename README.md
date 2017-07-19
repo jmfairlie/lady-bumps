@@ -29,15 +29,30 @@ A javascript based 2D Isometric-like tile game inspired by Udacity's frontend-na
 <li>Alternatively you can try the game directly by following the link in this project's description.</li>
 </ol>
 
+<h3>ACKNOWLEDGEMENTS</h3>
+<ul>
+<li>All tiles are part of "Planet Cute" collection by Daniel Cook @ <a href="http://www.lostgarden.com/2007/05/cutegod-prototyping-challenge.html">Lostgarden.com</a>
+</li>
+<li>
+    Background music loop is from B_Lamerichs @ <a href="https://freesound.org/people/B_Lamerichs/sounds/220322/">freesound.org</a>
+</li>
+<li>
+    Win sfx is from LittleRobotSoundFactory @ <a href="https://freesound.org/people/LittleRobotSoundFactory/sounds/270319/">freesound.org</a>
+</li>
+<li>
+    Game over sfx is from jivatma07 @ <a href="https://freesound.org/people/jivatma07/sounds/173859/">freesound.org</a>
+</li>
+</ul>
+
 <h3>TODO</h3>
 <ul>
 <li> Improve collision detection</li>
 <li> Randomly generate maps.</li>
 <li>
-    Add sounds
+    <strike>Add sounds</strike>
 </li>
 <li>
-    Rewrite in game UI logic(game transitions, fade effects, buttons)
+    Rewrite in game UI logic(game transitions, fade effects, buttons) using basic HTML/CSS
 </li>
 <li>
     Add clear text/visual feedback for each posible game ending(time out, death, winning)

@@ -13,9 +13,70 @@ var entityList;
 var numItems = 10;
 //game duration in s
 var timer = 60;
+var gemtimebonus = 2000;
 
 //wasn't able to declare this in engine.js, but it should go there.
 var item_map;
+
+var SFX = function() {
+    this.effects = {
+        stomp: new Howl({
+            src:['./audio/stomp.mp3'],
+        }),
+        yelp: [
+            new Howl({
+                src:['./audio/yelp_0.mp3']
+            }),
+            new Howl({
+                src:['./audio/yelp_1.mp3']
+            }),
+            new Howl({
+                src:['./audio/yelp_2.mp3']
+            }),
+            new Howl({
+                src:['./audio/yelp_3.mp3']
+            })
+        ],
+        gem: new Howl({
+            src:['./audio/coin.mp3'],
+        }),
+        gameover: new Howl({
+            src:['./audio/game_over.mp3'],
+        }),
+        win: new Howl({
+            src:['./audio/win.mp3'],
+        }),
+        music: new Howl({
+            src:['./audio/music.ogg'],
+            loop:true
+        })
+    }
+}
+
+SFX.prototype.play = function(id) {
+    if(Array.isArray(this.effects[id])) {
+        var num = this.effects[id].length;
+        var randindx = Math.floor(Math.random()*num);
+        this.effects[id][randindx].play();
+    } else {
+        this.effects[id].play();
+    }
+}
+
+SFX.prototype.fadeOut = function(id) {
+    var self = this;
+    this.effects[id].fade(0.20, 0, 2000);
+    this.effects[id].once('fade', function() {
+        self.effects[id].stop();
+    });
+}
+
+SFX.prototype.fadeIn = function(id) {
+    this.effects[id].play();
+    this.effects[id].fade(0, 0.20, 1000);
+}
+
+var sfx = new SFX();
 
 /*
  * returns an alpha value between min_transparency and 1
@@ -353,13 +414,18 @@ var Player = function(x, y) {
     this.state = this.stateType.DEFAULT;
     this.life = 100;
     this.gemcount = 0;
+    this.timebonus=0;
 };
 
 Player.prototype = Object.create(Entity.prototype);
 Player.prototype.constructor = Player;
 
 Player.prototype.doDamage = function() {
+
+
     if(this.state != this.stateType.DAMAGE) {
+            sfx.play('stomp');
+            sfx.play('yelp');
         this.state = this.stateType.DAMAGE;
         var shittyClosures = this;
         //stop the damage animation in 1 sec
@@ -394,7 +460,9 @@ Player.prototype.checkItems = function() {
 
         if(gotit) {
             delete item_map[level][this.tileTop][col];
+            sfx.play('gem');
             this.gemcount++;
+            this.timebonus = this.timebonus + gemtimebonus;
         }
     }
 };
