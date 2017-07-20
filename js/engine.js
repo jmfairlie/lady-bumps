@@ -159,7 +159,6 @@ var Engine = (function(global) {
         dt = (now - lastTime) / 1000.0;
         //TODO: this state machine logic is quite convoluted and impractical. Needs refactoring.
         switch (gameState.current) {
-
             case gameState.type.IN_GAME:
                 update(dt);
                 render();
@@ -234,6 +233,7 @@ var Engine = (function(global) {
                 if(renderMenu(genericTimeStamp, duration, color, start_opacity, canvas.height/2, 0)) {
                         gameState.current = gameState.type.GAME_MENU_FADEIN;
                         genericTimeStamp = now;
+                        sfx.fadeIn('music');
                 }
 
             break;
@@ -258,7 +258,7 @@ var Engine = (function(global) {
                 start_opacity = 1;
                 end_opacity =0;
                 color = 'black';
-                duration = 3;
+                duration = 2;
                 render();
 
                 if (renderFade(genericTimeStamp, duration, start_opacity, end_opacity, color)) {
@@ -298,7 +298,6 @@ var Engine = (function(global) {
             canvas.height + 100, button_width, button_width/4, '#333',
             'red', 'white', 3, "Play",'white', font, 'black', 1,
             function () {
-                sfx.fadeIn('music');
                 gameState.current = gameState.type.GAME_MENU_HIDE;
                 genericTimeStamp = Date.now();
                 canvas.removeEventListener('mousemove',menuButtonHover,false);

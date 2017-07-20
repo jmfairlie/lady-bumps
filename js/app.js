@@ -84,7 +84,7 @@ SFX.prototype.fadeOut = function(id) {
 
 SFX.prototype.fadeIn = function(id) {
     this.effects[id].play();
-    this.effects[id].fade(0, 1, 1000);
+    this.effects[id].fade(0, 1, 2000);
 }
 
 var sfx = new SFX();
