@@ -40,8 +40,15 @@ var SFX = function() {
         gem: new Howl({
             src:['./audio/coin.mp3'],
         }),
+        tictac: new Howl({
+            src:['./audio/tictac.ogg'],
+            loop:true
+        }),
         gameover: new Howl({
             src:['./audio/game_over.mp3'],
+        }),
+        buzzer: new Howl({
+            src:['./audio/buzzer.ogg'],
         }),
         win: new Howl({
             src:['./audio/win.mp3'],
@@ -63,9 +70,13 @@ SFX.prototype.play = function(id) {
     }
 }
 
+SFX.prototype.stop = function(id) {
+    this.effects[id].stop();
+}
+
 SFX.prototype.fadeOut = function(id) {
     var self = this;
-    this.effects[id].fade(0.20, 0, 2000);
+    this.effects[id].fade(1, 0, 1000);
     this.effects[id].once('fade', function() {
         self.effects[id].stop();
     });
@@ -73,7 +84,7 @@ SFX.prototype.fadeOut = function(id) {
 
 SFX.prototype.fadeIn = function(id) {
     this.effects[id].play();
-    this.effects[id].fade(0, 0.20, 1000);
+    this.effects[id].fade(0, 1, 1000);
 }
 
 var sfx = new SFX();

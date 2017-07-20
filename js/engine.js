@@ -53,7 +53,7 @@ var Engine = (function(global) {
                         GAME_MENU_FADEOUT: 5
                     }
                 };
-
+    var isticking= false;
     var genericTimeStamp;
     var menuButton;
 
@@ -134,9 +134,12 @@ var Engine = (function(global) {
       return "rgb("+Math.min(r, 255)+","+Math.min(g, 255)+","+Math.min(b, 255)+")";
     }
 
-    function isGameOver(now) {
-        return player.life === 0 ||
-        (now - gameStartTime - player.timebonus)/1000 >= timer;
+    function timeOut(now) {
+        return (now - gameStartTime - player.timebonus)/1000 >= timer;
+    }
+
+    function playerDied() {
+        return player.life === 0;
     }
 
     function didPlayerWin() {
@@ -161,19 +164,39 @@ var Engine = (function(global) {
                 update(dt);
                 render();
                 renderUI();
-                var gameover = isGameOver(now);
+                var timeout = timeOut(now);
+                var playerdied = playerDied();
+
+                var gameover = timeout || playerdied;
+
                 var playerwon = didPlayerWin();
 
                 if (gameover || playerwon)
                 {
+                    if(isticking) {
+                        sfx.stop("tictac");
+                    }
+
                     sfx.fadeOut("music");
                     gameState.current = gameState.type.GAME_FINISHED;
                     genericTimeStamp = now;
 
-                    if(gameover) {
+                    if(timeout) {
+                        sfx.play("buzzer");
+                    } else if(playerdied) {
                         sfx.play("gameover");
                     } else {
                         sfx.play("win");
+                    }
+                } else {
+                    var elapsed = (now - gameStartTime - player.timebonus)/1000;
+                    var remaining = timer - elapsed;
+                    if((remaining < 15) && !isticking) {
+                        isticking=true;
+                        sfx.play("tictac");
+                    } else if ((remaining > 15) && isticking) {
+                        isticking=false;
+                        sfx.stop("tictac");
                     }
                 }
 
