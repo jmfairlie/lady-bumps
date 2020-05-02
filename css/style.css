@@ -1,20 +1,129 @@
 body {
     text-align: center;
     background-color: black;
+    height: 100%;
+    overflow: hidden;
+    touch-action: none;
+}
+
+* {
+    user-select: none;
 }
 
 #container {
-    position:absolute;
-    top:0;
-    bottom:0;
-    left:0;
-    right:0;
-    width: 600px;
-    height: 805px;
-    margin:auto;
+    position: absolute;
+    top:50%;
+    left:50%;
+    width: 100%;
+    max-width: 1024px;
+    transform: translate(-50%, -50%);
+    height: 100%;
+    font-size: 96px;
+    font-family: sans-serif;
+    color: white;
+    overflow: hidden;
+}
+
+.title {
+  top: 25%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  position: absolute;
+  white-space: nowrap;
+  color: red;
+  transition: top 0.5s ease-in;
+  font-family: "Lobster", sans-serif;
+}
+
+.title.hidden {
+  top: -20%;
+}
+
+.title::before {
+  text-shadow: -3px 0px 2px white, 3px 0px 2px white, 0 -3px 2px white, 0 3px 2px white;
+  content: "Lady Bumps!";
+}
+
+.instructions {
+  margin: 0;
+  font-size: 35%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: left 0.5s ease-in;
+  text-align: left;
+  color: #999;
+}
+
+.instructions.hidden {
+  left: -100%;
+}
+
+.play-button {
+  background-color: gray;
+  border-radius: 30px;
+  padding: 0 50px;
+  font-weight: bold;
+  font-size: 50%;
+  position: absolute;
+  background-color: #333;
+  border: 5px solid white;
+  top: 75%;
+  left:50%;
+  transform: translate(-50%, -50%);
+  transition: top 0.5s ease-in;
+  cursor: pointer;
+}
+
+.play-button.hidden {
+  top: 120%;
+}
+
+.play-button:hover {
+  background-color: red;
+}
+
+.play-button::before {
+  content: "Play";
+}
+
+.github {
+  display: block;
+  cursor: pointer;
+  position: absolute;
+  top: 5%;
+  left: 95%;
+  transform: translate(-50%, -50%);
+  transition: left 0.5s ease-in;
+  background-image: url(../images/github.svg);
+  width:5vmin;
+}
+
+.github::after {
+  content: "";
+  display:block;
+  padding-top: 100%;
+}
+
+.github.hidden {
+  left: 120%;
 }
 
 canvas {
     width:100%;
     height:100%;
+}
+
+
+@media screen and (max-width: 980px) and (orientation:landscape) {
+  #container {
+    font-size: 54px;
+  }
+}
+
+@media screen and  (orientation:portrait) {
+  #container {
+    font-size: 150px;
+  }
 }

@@ -478,24 +478,10 @@ Player.prototype.checkItems = function() {
     }
 };
 
-Player.prototype.handleInput = function(direction) {
+Player.prototype.move = function(dvx, dvy) {
     if (gameState.current == gameState.type.IN_GAME) {
-        switch(direction) {
-            case "left":
-                this.vx -= this.vmag;
-            break;
-            case "up":
-                this.vy -= this.vmag;
-            break;
-            case "right":
-                this.vx += this.vmag;
-            break;
-            case "down":
-                this.vy += this.vmag;
-            break;
-            default:
-            break;
-        }
+        this.vy += dvy*this.vmag;
+        this.vx += dvx*this.vmag;
     }
 };
 
@@ -520,28 +506,12 @@ Player.prototype.customRenderOperation = function(ctx) {
     }
 };
 
-var keyHandler = function(e) {
-        var allowedKeys = {
-            37: 'left',
-            38: 'up',
-            39: 'right',
-            40: 'down'
-        };
-
-        player.handleInput(allowedKeys[e.keyCode]);
-};
-
 var initAppStuff = function()
 {
     allEntities = {};
     entityList = {};
     deployPlayer();
     deployEnemies();
-
-    // This listens for key presses and sends the keys to your
-    // Player.handleInput() method. You don't need to modify this.
-    document.removeEventListener('keyup', keyHandler);
-    document.addEventListener('keyup', keyHandler);
 };
 
 

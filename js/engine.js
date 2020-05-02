@@ -9,7 +9,25 @@ var Engine = (function(global) {
         ctx = canvas.getContext('2d'),
         lastTime, gameStartTime;
 
-    var container=doc.getElementById("container");
+    var container= doc.getElementById("container");
+    var menuButton = doc.querySelector(".play-button");
+    var titleBlock = doc.querySelector(".title");
+    var instructions = doc.querySelector(".instructions");
+    var github = doc.querySelector(".github");
+
+    menuButton.addEventListener('mousedown', startGame, false);
+    menuButton.addEventListener('touchend', startGame, false);
+
+    canvas.addEventListener("touchend", handleTouchEnd, false);
+    // This listens for key presses and sends the keys to your
+    // Player.handleInput() method. You don't need to modify this.
+
+    doc.addEventListener('keyup', keyHandler);
+
+    window.addEventListener('resize', function(e) {
+      canvas.width = container.offsetWidth;
+      canvas.height = container.offsetHeight;
+    })
 
     canvas.width = container.offsetWidth;
     canvas.height = container.offsetHeight;
@@ -55,78 +73,44 @@ var Engine = (function(global) {
                 };
     var isticking= false;
     var genericTimeStamp;
-    var menuButton;
 
-    //button class used in the menu.
-    //TODO:  this is very impractical and hacky. Replace with something else.
-    var Button = function(x, y, width, height, color, hovercolor, strokecolor,
-        linewidth, text, textcolor, font, textstrokecolor, textstrokewidth, callback) {
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        this.color = color;
-        this.hovercolor = hovercolor;
-        this.strokecolor = strokecolor;
-        this.textstrokewidth = textstrokewidth;
-        this.linewidth = linewidth;
-        this.text = text;
-        this.textcolor = textcolor;
-        this.font = font;
-        this.fontsize = Math.floor(height*0.8);
-        this.textstrokecolor = textstrokecolor;
-        this.callback = callback;
-        this.hover = false;
+
+    function keyHandler(e) {
+      var allowedKeys = {
+          37: 'left',
+          38: 'up',
+          39: 'right',
+          40: 'down'
+      };
+      var dx = 0, dy = 0;
+      var direction = allowedKeys[e.keyCode];
+      switch(direction) {
+          case "left":
+              dx = -1.0;
+          break;
+          case "up":
+              dy = -1.0;
+          break;
+          case "right":
+              dx = 1.0;
+          break;
+          case "down":
+              dy = 1.0;
+          break;
+          default:
+          break;
+      }
+
+      (dx || dy) && player.move(dx, dy);
     };
 
-    Button.prototype.render = function() {
-        var radius = this.height/2, text_dims;
-        var currcolor = (this.hover)?this.hovercolor:this.color;
-
-        renderArc(this.x + radius, this.y + this.height/2, radius, currcolor,
-            this.strokecolor, this.linewidth, 1, 0, Math.PI*2);
-        renderArc(this.x + this.width - radius, this.y + this.height/2, radius,
-            currcolor, this.strokecolor, this.linewidth, 1, 0, Math.PI*2);
-        renderSquare(this.x + radius, this.y, this.width - 2*radius, this.height,
-            currcolor, this.strokecolor, this.linewidth, 1);
-        renderSquare(this.x + radius - this.linewidth, this.y + this.linewidth/2,
-            this.width - 2*radius + 2*this.linewidth, this.height - this.linewidth,
-            currcolor, null, 0, 1);
-
-        text_dims = queryTextDims(this.text, this.fontsize+"px "+this.font);
-        renderText(this.x + (this.width - text_dims.width)/2,
-            this.y + this.height/2 + this.fontsize/3 , this.text,
-            this.textstrokewidth, this.font, this.fontsize, this.textcolor,
-            this.textstrokecolor);
-    };
-
-    Button.prototype.onMouseMove = function(e) {
-
-        var coords = getEventCoords(e);
-        this.hover = coords.x > this.x &&
-        coords.x < (this.x + this.width) &&
-        coords.y > this.y &&
-        coords.y < (this.y + this.height);
-    };
-
-    Button.prototype.onMouseDown = function(e) {
-        var coords = getEventCoords(e);
-        var clicked = coords.x > this.x &&
-                    coords.x < (this.x + this.width) &&
-                    coords.y > this.y &&
-                    coords.y < (this.y + this.height);
-        if(clicked) {
-            this.callback();
-        }
-    };
-
-    //super hack. Factor away...
-    function getEventCoords(e) {
-        var rect = canvas.getBoundingClientRect();
-        return {
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top + canvas.height/2
-                };
+    function startGame () {
+        menuButton.classList.add("hidden");
+        titleBlock.classList.add("hidden");
+        instructions.classList.add("hidden");
+        github.classList.add("hidden");
+        gameState.current = gameState.type.GAME_MENU_HIDE;
+        genericTimeStamp = Date.now();
     }
 
     //helper function
@@ -144,6 +128,49 @@ var Engine = (function(global) {
 
     function didPlayerWin() {
         return player.gemcount === numItems;
+    }
+
+    function handleTouchEnd(e) {
+      e.preventDefault();
+      var item = e && e.changedTouches && e.changedTouches.item(0);
+
+      if(item) {
+        var playerAbsolutePosX, playerAbsolutePosY;
+
+        if ( player.x + player.hitRect.cx < canvas.width/2) {
+            playerAbsolutePosX = player.x;
+        }
+
+        else if( player.x + player.hitRect.cx > numCols*mapTileWidth - canvas.width/2) {
+            playerAbsolutePosX =  canvas.width + player.x - numCols*mapTileWidth;
+        }
+
+        else {
+            playerAbsolutePosX = canvas.width/2 - player.hitRect.cx;
+        }
+
+        if ( player.y + player.hitRect.cy < canvas.height/2) {
+            playerAbsolutePosY = player.y;
+        }
+
+        else if( player.y + player.hitRect.cy > numRows*mapTileHeight - canvas.height/2) {
+            playerAbsolutePosY =  canvas.height + player.y - numRows*mapTileHeight;
+        }
+
+        else {
+            playerAbsolutePosY = canvas.height/2 - player.hitRect.cy;
+        }
+
+        var dx = item.clientX - playerAbsolutePosX;
+        var dy = item.clientY - playerAbsolutePosY;
+
+        var length = Math.sqrt(dx*dx + dy*dy);
+        var nx = dx/length*2;
+        var ny = dy/length*2;
+
+        player.move(nx, ny);
+      }
+
     }
 
     /* This function serves as the kickoff point for the game loop itself
@@ -221,7 +248,7 @@ var Engine = (function(global) {
                 duration = 0.5;
                 render();
                 update(dt);
-                renderMenu(genericTimeStamp, duration, color, start_opacity, 0, canvas.height/2 );
+                renderSquare(0,0, canvas.width, canvas.height, color, null, 0, start_opacity);
             break;
 
             case gameState.type.GAME_MENU_HIDE:
@@ -230,10 +257,11 @@ var Engine = (function(global) {
                 duration = 0.5;
                 render();
                 update(dt);
-                if(renderMenu(genericTimeStamp, duration, color, start_opacity, canvas.height/2, 0)) {
-                        gameState.current = gameState.type.GAME_MENU_FADEIN;
-                        genericTimeStamp = now;
-                        sfx.fadeIn('music');
+                renderSquare(0,0, canvas.width, canvas.height, color, null, 0, start_opacity);
+                if(Date.now() - genericTimeStamp > 500) {
+                  gameState.current = gameState.type.GAME_MENU_FADEIN;
+                  genericTimeStamp = now;
+                  sfx.fadeIn('music');
                 }
 
             break;
@@ -292,43 +320,14 @@ var Engine = (function(global) {
 
 /* Called everytime a new game starts*/
     function initGameMenu() {
-        var button_width = canvas.width/3;
-        var font = 'Lobster';
-        menuButton = new Button((canvas.width - button_width)/2,
-            canvas.height + 100, button_width, button_width/4, '#333',
-            'red', 'white', 3, "Play",'white', font, 'black', 1,
-            function () {
-                gameState.current = gameState.type.GAME_MENU_HIDE;
-                genericTimeStamp = Date.now();
-                canvas.removeEventListener('mousemove',menuButtonHover,false);
-                canvas.removeEventListener('mousemove',menuButtonClick,false);
-            });
-
         gameState.current = gameState.type.GAME_MENU;
         genericTimeStamp = Date.now();
-
-        canvas.removeEventListener('mousemove',
-            menuButtonHover,
-            false);
-        canvas.addEventListener('mousemove',
-            menuButtonHover,
-            false);
-
-        canvas.removeEventListener('mousedown',
-            menuButtonClick,
-            false);
-        canvas.addEventListener('mousedown',
-            menuButtonClick,
-            false);
+        menuButton.classList.remove("hidden");
+        titleBlock.classList.remove("hidden");
+        instructions.classList.remove("hidden");
+        github.classList.remove("hidden");
     }
 
-    function menuButtonHover(e) {
-        menuButton.onMouseMove(e);
-    }
-
-    function menuButtonClick(e) {
-        menuButton.onMouseDown(e);
-    }
 
 /*
  * fills up the shadow_map data structure which contains the information
@@ -755,34 +754,6 @@ var Engine = (function(global) {
         var done = elapsed > duration;
         var opacity = done? end_opacity: start_opacity + (end_opacity - start_opacity)*elapsed/duration;
         renderSquare(0,0, canvas.width, canvas.height, color, null, 0, opacity);
-        return done;
-    }
-
-    //hacky game menu
-    //TODO: refactor
-    function renderMenu(start, duration, bgcolor, opacity, initialOffsetY, finalOffsetY) {
-        var text = 'Lady Bumps!';
-        var font = 'Lobster';
-        var fontsize = 100;
-
-        var elapsed  = Date.now() - start;
-        var done = elapsed > duration*1000;
-        var offsety = done?finalOffsetY: initialOffsetY + elapsed/1000/duration*(finalOffsetY - initialOffsetY);
-
-        var dims = queryTextDims(text, fontsize+"px "+font);
-
-        renderSquare(0,0, canvas.width, canvas.height, bgcolor, null, 0, opacity);
-
-        ctx.save();
-        ctx.translate((canvas.width - dims.width)/2, offsety);
-        renderText(0, -fontsize, text, 3, font, fontsize, 'red', 'white');
-        ctx.restore();
-
-        ctx.save();
-        ctx.translate(0 ,- offsety);
-        menuButton.render();
-        ctx.restore();
-
         return done;
     }
 

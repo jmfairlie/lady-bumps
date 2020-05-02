@@ -52,7 +52,7 @@ A javascript based 2D Isometric-like tile game inspired by Udacity's frontend-na
     <strike>Add sounds</strike>
 </li>
 <li>
-    Rewrite in game UI logic(game transitions, fade effects, buttons) using basic HTML/CSS
+    <strike>Rewrite in game UI logic(game transitions, fade effects, buttons) using basic HTML/CSS</strike>
 </li>
 <li>
     Add clear text/visual feedback for each posible game ending(time out, death, winning)
@@ -64,9 +64,3 @@ A javascript based 2D Isometric-like tile game inspired by Udacity's frontend-na
 
 <h3>COMMENTS/QUESTIONS</h3>
 jmfairlie at gmail dot com
-
-
-
-
-
-
